@@ -1,0 +1,15 @@
+diff -ur linux-6.5.10/arch/parisc/Makefile ../linux-6.5.10/arch/parisc/Makefile
+--- linux-6.5.10/arch/parisc/Makefile	2023-11-02 09:37:00.000000000 +0100
++++ ../linux-6.5.10/arch/parisc/Makefile	2023-11-08 16:41:54.055630839 +0100
+@@ -45,9 +45,10 @@
+ CROSS32_COMPILE := $(call cc-cross-prefix, \
+ 	$(foreach a,$(CC_ARCHES_32), \
+ 	$(foreach s,$(CC_SUFFIXES),$(a)-$(s)-)))
+-CROSS32CC := $(CROSS32_COMPILE)gcc
++CROSS32CC := hppa-openadk-linux-uclibc-gcc
+ export CROSS32CC
+ 
++
+ # Set default cross compiler for kernel build
+ ifdef cross_compiling
+ 	ifeq ($(CROSS_COMPILE),)
