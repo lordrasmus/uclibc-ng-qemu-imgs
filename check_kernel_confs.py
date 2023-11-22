@@ -8,6 +8,8 @@ confs = glob.glob("*.config")
 
 checks= ["CONFIG_SIGNALFD", "CONFIG_TIMERFD","CONFIG_SYSVIPC","CONFIG_POSIX_MQUEUE", "INOTIFY_USER","UNIX", "CONFIG_INET", "CONFIG_SWAP","CONFIG_PRINTK_TIME","CONFIG_IKCONFIG","CONFIG_IKCONFIG_PROC"]
 
+confs = sorted( confs )
+
 for c in confs:
     with open(c,"r") as f:
         data = f.read()
