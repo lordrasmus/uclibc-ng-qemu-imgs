@@ -6,7 +6,7 @@ import glob
 confs = glob.glob("*.config")
 
 
-checks= ["CONFIG_SIGNALFD", "CONFIG_TIMERFD","CONFIG_SYSVIPC","CONFIG_POSIX_MQUEUE"]
+checks= ["CONFIG_SIGNALFD", "CONFIG_TIMERFD","CONFIG_SYSVIPC","CONFIG_POSIX_MQUEUE", "INOTIFY_USER"]
 
 for c in confs:
     with open(c,"r") as f:
