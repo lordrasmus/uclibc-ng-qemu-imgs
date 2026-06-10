@@ -1,15 +1,20 @@
-# nios2: do not gate syscall restart on the user r1 register.
-# Fixes ERESTARTNOHAND (errno 514) leaking from pselect6 and waitpid
-# (pselect/popen tests). Full description + reproducer in
-# uclibc-ng/git/kernel-submit/0001-nios2-do-not-gate-syscall-restart-*.patch
+# nios2: gate syscall restart on the error flag (r7), not the stale r1.
+# do_signal() used regs->r1 (the user's 'at' reg, an arbitrary value) to decide
+# whether to do syscall-restart. That both missed real restarts (ERESTARTNOHAND
+# leaked as errno 514 from pselect6) and, since the restart switch ignores the
+# error flag, spuriously restarted SUCCESSFUL syscalls whose return value collides
+# with a restart code (waitpid->child PID 512-516, read->512-516 bytes -> exit 255).
+# Restart codes are only ever error returns (r7=1); gate on r7.
+# Full description + reproducers in
+# uclibc-ng/git/kernel-submit/0001-nios2-*.patch + nios2-*-reproducer.c
 --- linux-6.5.10/arch/nios2/kernel/signal.c	2023-11-02 09:37:00.000000000 +0100
-+++ ../linux-6.5.10/arch/nios2/kernel/signal.c	2026-06-09 21:53:45.839559034 +0200
++++ ../linux-6.5.10/arch/nios2/kernel/signal.c	2026-06-10 15:29:55.529711324 +0200
 @@ -242,7 +242,7 @@
  	/*
  	 * If we were from a system call, check for system call restarting...
  	 */
 -	if (regs->orig_r2 >= 0 && regs->r1) {
-+	if (regs->orig_r2 >= 0) {
++	if (regs->orig_r2 >= 0 && regs->r7) {
  		continue_addr = regs->ea;
  		restart_addr = continue_addr - 4;
  		retval = regs->r2;
