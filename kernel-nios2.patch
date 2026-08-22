@@ -18,3 +18,23 @@
  		continue_addr = regs->ea;
  		restart_addr = continue_addr - 4;
  		retval = regs->r2;
+
+# nios2: put ELF_ET_DYN_BASE inside the user address space.
+# It was 0xD0000000, but nios2 ends its user space at TASK_SIZE 0x7FFF0000, so
+# load_elf_binary() cannot map a PIE there: the MAP_FIXED_NOREPLACE mapping is
+# rejected with -ENOMEM after begin_new_exec(), i.e. past the point of no
+# return, and every exec of a PIE dies with SIGSEGV -- with the calling shell's
+# registers in the dump, which makes it look like a crash in the new program.
+# Without this all 11 -pie tests of the testsuite fail. Value as on sh.
+# Full description in uclibc-ng/git/kernel-submit/0001-nios2-put-ELF_ET_DYN_BASE-*.patch
+--- linux-6.5.10/arch/nios2/include/asm/elf.h
++++ ../linux-6.5.10/arch/nios2/include/asm/elf.h
+@@ -23,7 +23,7 @@
+    the loader.  We need to make sure that it is out of the way of the program
+    that it will "exec", and that there is sufficient room for the brk.  */
+ 
+-#define ELF_ET_DYN_BASE		0xD0000000UL
++#define ELF_ET_DYN_BASE		(2 * TASK_SIZE / 3)
+ 
+ /* regs is struct pt_regs, pr_reg is elf_gregset_t (which is
+    now struct_user_regs, they are different) */
