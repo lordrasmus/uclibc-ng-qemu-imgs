@@ -1,0 +1,35 @@
+# sh4/r2d: let the guest have more than 64 MB of SDRAM.
+# The r2d machine hardwires 64 MB and ignores -m, so an initramfs that no
+# longer fits leaves the kernel with
+#   rootfs image is not initramfs (write error); looks like an initrd
+# and the files at the end of the cpio simply never appear -- which looks like
+# a handful of broken tests rather than a full filesystem.
+# Idea and the one-liner from Waldemar Brodkorb, who runs the same setup.
+# 112 MB is not the ceiling: SDRAM resumes behind the SM501 and runs up to its
+# register window at 0x13e00000, so 0x07e00000 (126 MB) would still fit.  The
+# SM501's 8 MB VRAM aperture at 0x10000000 does win over SDRAM in qemu's flat
+# map, but it is itself a RAM region, so the guest sees ordinary memory there;
+# nothing uses it as a framebuffer (CONFIG_MFD_SM501=y but no CONFIG_FB, and we
+# run -nographic).
+# kernel-sh4.config needs a matching CONFIG_MEMORY_SIZE -- sh4 has no memory
+# detection, the size is compiled in.  Apply this to qemu first, or the kernel
+# claims memory the machine does not have.
+# Only qemu-system-sh4 in qemu-inst.tar.xz is rebuilt from this (8.1.2); the
+# other binaries in the bundle are untouched.
+--- qemu-8.1.2/hw/sh4/r2d.c
++++ qemu-8.1.2/hw/sh4/r2d.c
+@@ -48,7 +48,13 @@
+ #define FLASH_SIZE (16 * MiB)
+ 
+ #define SDRAM_BASE 0x0c000000 /* Physical location of SDRAM: Area 3 */
+-#define SDRAM_SIZE 0x04000000
++/* SDRAM grows from 0x0c000000; the SM501 register window sits at
++   0x13e00000, so 0x07e00000 (126 MiB) would be the ceiling; 0x07000000
++   (112 MiB) leaves margin.  Its 8 MiB VRAM aperture at 0x10000000 is shadowed,
++   which is harmless for -nographic use. */
++#ifndef SDRAM_SIZE
++#define SDRAM_SIZE 0x07000000
++#endif
+ 
+ #define SM501_VRAM_SIZE 0x800000
+ 
