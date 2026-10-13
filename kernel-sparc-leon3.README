@@ -1,0 +1,52 @@
+# kernel-sparc-leon3.img -- how it is built, and why it is not just a vmlinux
+#
+# This image is the only one here that is NOT the raw kernel output.  qemu's
+# leon3_generic machine has no PROM and its built-in bootloader only pokes the
+# UART and timer registers and jumps to the ELF entry point -- it does not turn
+# the MMU on.  sparc32's head_32.S requires both: it reads the romvec from %o0
+# and bails out to halt_notsup if the MMU is off.  Loading vmlinux directly
+# gives "Trap 0x02 (Illegal Instruction) ... pc: f0004000", because the ELF is
+# linked at physical 0xf0000000 while leon3 RAM starts at 0x40000000.
+#
+# The missing piece is Gaisler's mklinuximg, a GPLv2 second stage loader that
+# sets up the MMU tables, builds a romvec and scans the AMBA plug&play bus:
+#
+#   https://download.gaisler.com/anonftp/linux/linux-6/kernel/mklinuximg-2.0.20.tar.bz2
+#
+# Build steps (the toolchain is the same one the CI target uses):
+#
+#   # 1. kernel, from kernel-sparc-leon3.config
+#   make -C <linux-6.18.37> O=<obj> ARCH=sparc CROSS_COMPILE=sparc-openadk-linux-uclibc- -j20
+#
+#   # 2. wrap it.  -cflags is only needed because the toolchain finds no libc
+#   #    headers on its own; mklinuximg itself is freestanding.
+#   CROSS_COMPILE=sparc-openadk-linux-uclibc- \
+#     ./mklinuximg <obj>/vmlinux kernel-sparc-leon3.img \
+#       -cmdline "console=ttyS0,38400" -cflags "--sysroot=<sysroot>" -strip
+#
+# The command line is baked in here, because leon3_generic has no -append.
+#
+# Rootfs: leon3_generic has no -initrd either, so the rootfs goes into the
+# 16M placeholder (kernel-sparc-leon3.cpio, CONFIG_INITRAMFS_SOURCE points at
+# "../kernel-sparc-leon3.cpio", CONFIG_INITRAMFS_COMPRESSION_NONE=y so the
+# signature survives).  Unlike the xtensa/cf5208 placeholders this one takes the
+# *xz-compressed* rootfs: unpack_to_rootfs() runs decompress_method() over the
+# built-in blob and skips the trailing zeros one byte at a time.  Raw cpio would
+# need 80M, because sparc's linker aligns every data segment to 64K and 86% of
+# the sparc rootfs is zero padding.
+#
+# Two version traps:
+#
+#   Kernel.  drivers/tty/serial/apbuart.c is broken between v6.3 and v6.7:
+#   apbuart_tx_chars() asks uart_port_tx_limited() for "port->fifosize >> 1"
+#   characters, and qemu's APBUART model reports no FIFO depth, so
+#   apbuart_scan_fifo_size() returns 1 and the count is 0 -- nothing is ever
+#   transmitted.  printk still works (it polls), so the kernel log looks
+#   perfect while userspace output vanishes.  Before v6.3 the loop was a
+#   do/while that always sent one character; v6.8 dropped the ">> 1".  Stay
+#   outside that window or carry a one-line patch.
+#
+#   qemu.  qemu-system-sparc 10.2.1 does not boot leon3_generic at all, not
+#   even Gaisler's own reference image -- it exits silently after 48ms.  The
+#   8.1.2 in qemu-inst.tar.xz works.  So this target cannot be run with
+#   "uc_devel -q --system-qemu".
