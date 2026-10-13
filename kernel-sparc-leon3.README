@@ -46,7 +46,11 @@
 #   do/while that always sent one character; v6.8 dropped the ">> 1".  Stay
 #   outside that window or carry a one-line patch.
 #
-#   qemu.  qemu-system-sparc 10.2.1 does not boot leon3_generic at all, not
-#   even Gaisler's own reference image -- it exits silently after 48ms.  The
-#   8.1.2 in qemu-inst.tar.xz works.  So this target cannot be run with
-#   "uc_devel -q --system-qemu".
+#   qemu.  Every qemu from 9.0.0 on fails to boot leon3_generic with -kernel,
+#   Gaisler's own reference image included: it exits silently after ~50ms with
+#   no output.  Bisected to 92688a91c358, which dropped the stack pointer from
+#   the machine's reset handler without putting it into the synthetic
+#   bootloader; see qemu-leon3-bootloader-sp.patch next to this file, which is
+#   what the qemu-system-sparc in qemu-inst.tar.xz carries.  A distribution
+#   qemu does not have that patch, so this target cannot be run with
+#   "uc_devel -q --system-qemu" until the fix is upstream.

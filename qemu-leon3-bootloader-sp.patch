@@ -1,0 +1,65 @@
+# leon3: give the payload a stack pointer again.
+#
+# qemu's leon3_generic has no PROM. When started with -kernel it writes a tiny
+# bootloader into the PROM region that sets up UART and timer and jumps to the
+# image; the comment above it says the machine "is expected to be in a different
+# state (eg: initialized by the bootloader)" and that this code "reproduces this
+# behavior". Part of that state used to be %sp, set by the reset handler.
+#
+# 92688a91c358 ("hw/sparc/leon3: remove SP initialization", Clement Chigot,
+# 2024-01-31, first released in 9.0.0) removed it, correctly as far as reset
+# semantics go -- the GR712RC manual says a reset must not touch %sp -- but
+# without putting it back into the bootloader. Since then every -kernel payload
+# on this machine starts with %sp = 0.
+#
+# Linux images wrapped by Gaisler's mklinuximg die in boot_main: the loader
+# clears the bss of its virtually linked part at 0xffd00000, the access is not
+# translated, trap 0x29 (data_access_error) lands in head_bad_trap, and
+# CPU_FEATURE_TA0_SHUTDOWN ends qemu cleanly after ~50 ms with no output at all.
+# Bisected between v8.2.0 (good) and v9.0.0 (bad) with Gaisler's own reference
+# image, leon-linux-5.10-1.11/up/image.ram, which fails the same way -- so this
+# is not specific to our images. Nothing about it is reported upstream.
+#
+# This sets %sp in the bootloader instead of reinstating it in reset. Verified
+# on 11.1.0: Gaisler's image boots, our kernel-sparc-leon3.img runs the suite,
+# and SS-20 is unaffected both UP and with -smp 4 (that machine never uses this
+# code). Still to be sent to qemu-devel.
+diff --git a/hw/sparc/leon3.c b/hw/sparc/leon3.c
+index d4a6e91759..9eb60785ce 100644
+--- a/hw/sparc/leon3.c
++++ b/hw/sparc/leon3.c
+@@ -106,11 +106,23 @@ static uint32_t *gen_store_u32(uint32_t *code, hwaddr addr, uint32_t val)
+  * initialization, it allows to use the same reset address for all the
+  * cpus.
+  */
+-static void write_bootloader(void *ptr, hwaddr kernel_addr)
++static void write_bootloader(void *ptr, hwaddr kernel_addr, hwaddr sp)
+ {
+     uint32_t *p = ptr;
+     uint32_t *sec_cpu_branch_p = NULL;
+ 
++    /*
++     * Give the payload a stack.  Commit 92688a91c358 took the initialisation
++     * of %sp out of the reset handler, correctly, because a reset must not
++     * touch it -- but this bootloader exists precisely to reproduce the state
++     * a real bootloader would have left behind, and that includes %sp.
++     * Without it mklinuximg-wrapped Linux images die in their startup code.
++     */
++    stl_be_p(p++, 0x1d000000 + extract32(sp, 10, 22));
++                               /* sethi %hi(sp), %o6  */
++    stl_be_p(p++, 0x9c13a000 + extract32(sp, 0, 10));
++                               /* or %o6, %lo(sp), %o6 */
++
+     /* If we are running on a secondary CPU, jump directly to the kernel.  */
+ 
+     stl_be_p(p++, 0x85444000); /* rd %asr17, %g2      */
+@@ -396,7 +408,8 @@ static void leon3_generic_hw_init(MachineState *machine)
+              * the machine in an initialized state through a little
+              * bootloader.
+              */
+-            write_bootloader(memory_region_get_ram_ptr(prom), entry);
++            write_bootloader(memory_region_get_ram_ptr(prom), entry,
++                             LEON3_RAM_OFFSET + ram_size);
+             reset_info->entry = LEON3_PROM_OFFSET;
+             for (i = 0; i < machine->smp.cpus; i++) {
+                 reset_info->info[i].cpu->env.pc = LEON3_PROM_OFFSET;
