@@ -1,0 +1,82 @@
+# leon3: make SMP Linux boot on leon3_generic.
+#
+# leon3_generic accepts -smp since 2024, but no SMP Linux kernel gets past
+# bringing up the second CPU, not even Gaisler's own prebuilt image
+# (leon-linux-5.10-1.11/smp). Two independent bugs in the model:
+#
+# 1. The IRQMP does not advertise broadcast. The model implements the
+#    broadcast register (grlib_irqmp.c sends a broadcast IRQ to every CPU),
+#    but never sets the BA bit (27) of the multiprocessor status register.
+#    Linux checks that bit before using SMP and stops with
+#        ######## !!!! The irqmp-ctrl must have broadcast enabled, smp wont work !!!!! #######
+#        kernel BUG at arch/sparc/kernel/leon_smp.c:141!
+#    Fix: set BA at reset. A write to the register only touches the CPU
+#    status bits, so the bit stays.
+#
+# 2. ASI 0x01 is not decoded. On LEON it is ASI_LEON_DCACHE_MISS, a data
+#    access that bypasses the data cache. A secondary CPU announces itself
+#    in leon_cpu_pre_online() with
+#        swapa [cpu_callin_map + 4*cpu] 0x01, %g2
+#    resolve_asi() has no case for 0x01 on sparc32, so the swap falls into
+#    gen_swap_asi()'s default and raises a data access exception with no
+#    fault address. The kernel finds no exception table entry for it,
+#    do_sparc_fault() faults again on the way out, and so on until the
+#    kernel stack runs out; qemu then stops with
+#        qemu: fatal: Trap 0x29 (Data Access Error) while interrupts disabled
+#    in spwin_bad_ustack_from_kernel (wof.S). Linux uses this ASI only in
+#    that one place, which is why a uniprocessor boot works.
+#    Fix: treat 0x01 as a plain supervisor data access. qemu models no data
+#    cache, so there is nothing to bypass. Only for CPUs with
+#    CPU_FEATURE_CACHE_CTRL, i.e. LEON; on other sparc32 CPUs 0x01 is
+#    unassigned and keeps raising the exception.
+#
+# Both are needed: with only (1) the guest reaches the swapa and dies, with
+# only (2) it stops at the BUG.
+#
+# Measured on 11.1.0 together with qemu-leon3-bootloader-sp.patch (without
+# that one -kernel does not boot at all): Gaisler's SMP image boots to the
+# login prompt with -smp 2 and -smp 4; with 4 CPUs, four busy loops run in
+# parallel, and timer interrupts and IPIs arrive on all four CPUs. A
+# linux-next kernel built with CONFIG_SMP for LEON brings up all CPUs.
+# SS-20 with -smp 4 boots unchanged (4 of 4).
+# Still to be sent to qemu-devel.
+#
+diff --git a/hw/intc/grlib_irqmp.c b/hw/intc/grlib_irqmp.c
+index 050be4d462..c005c4ac1c 100644
+--- a/hw/intc/grlib_irqmp.c
++++ b/hw/intc/grlib_irqmp.c
+@@ -55,6 +55,7 @@
+ /* Multiprocessor Status Register  */
+ #define MP_STATUS_CPU_STATUS_MASK ((1 << IRQMP_MAX_CPU)-2)
+ #define MP_STATUS_NCPU_SHIFT      28
++#define MP_STATUS_BA              (1 << 27) /* broadcast available */
+ 
+ #define MAX_PILS 16
+ 
+@@ -345,7 +346,7 @@ static void grlib_irqmp_reset(DeviceState *d)
+     memset(irqmp->state, 0, sizeof *irqmp->state);
+     irqmp->state->parent = irqmp;
+     irqmp->state->mpstatus = ((irqmp->ncpus - 1) << MP_STATUS_NCPU_SHIFT) |
+-        ((1 << irqmp->ncpus) - 2);
++        MP_STATUS_BA | ((1 << irqmp->ncpus) - 2);
+ }
+ 
+ static void grlib_irqmp_realize(DeviceState *dev, Error **errp)
+diff --git a/target/sparc/translate.c b/target/sparc/translate.c
+index 3156be6a94..b0b4e70545 100644
+--- a/target/sparc/translate.c
++++ b/target/sparc/translate.c
+@@ -1576,6 +1576,13 @@ static DisasASI resolve_asi(DisasContext *dc, int asi, MemOp memop)
+             mem_idx = MMU_KERNEL_IDX;
+             type = GET_ASI_DIRECT;
+             break;
++        case ASI_LEON_DCACHE_MISS: /* LEON forced cache miss */
++            /* We model no data cache, so this is a plain data access. */
++            if (dc->def->features & CPU_FEATURE_CACHE_CTRL) {
++                mem_idx = MMU_KERNEL_IDX;
++                type = GET_ASI_DIRECT;
++            }
++            break;
+         case ASI_USERTXT:     /* User text access */
+             mem_idx = MMU_USER_IDX;
+             type = GET_ASI_CODE;
