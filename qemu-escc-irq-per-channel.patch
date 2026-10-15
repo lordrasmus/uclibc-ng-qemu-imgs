@@ -1,0 +1,77 @@
+# escc: drive each channel's interrupt line from its own state.
+#
+# The ESCC model has one interrupt output per channel. escc_update_irq()
+# computes the state of both channels but writes it to the line of the
+# channel it was called for only:
+#
+#     irq = escc_update_irq_chn(s);
+#     irq |= escc_update_irq_chn(s->otherchn);
+#     qemu_set_irq(s->irq, irq);
+#
+# The other line keeps whatever value it got the last time that channel was
+# updated. sun4m and q800 OR the two lines into one interrupt. Once channel B
+# is updated while channel A has an interrupt pending, B's line holds a 1;
+# when A is acknowledged later, only A's line drops, and the OR stays high
+# until something touches channel B again -- which may never happen.
+#
+# What it looks like (SS-20, Linux): the console prints through channel A,
+# and when the driver sets up ttyS1 at ~2.5 s it writes RES_H_IUS to channel
+# B while A has its transmit interrupt pending. That is the last access to
+# channel B. As soon as the serial interrupt is unmasked, level 12 is taken
+# without end: sunzilog_interrupt() reads RR3, finds nothing to do, returns,
+# and is called again. CPU 0 never leaves interrupt context, and about 20 s
+# into boot the kernel reports
+#     rcu: INFO: rcu_sched self-detected stall on CPU
+# A trace of escc_* shows 1.6 million RR3 selects with no line change in
+# between, and "info pic" shows bit 15 (serial) pending in the master
+# register while the last escc_update_irq said IRQ = 0. Whether it happens
+# depends on that one moment, so boots fail at random.
+#
+# Driving each line from its own channel fixes it for both kinds of board.
+# A Z85C30 has a single /INT pin, which is what the Sun boards use, and the
+# OR of two per-channel lines is exactly that pin. The Mac I/O ASICs expose
+# the channels separately: qemu wires them to OLDWORLD_ESCCA_IRQ 0x0f /
+# OLDWORLD_ESCCB_IRQ 0x10 and NEWWORLD_ESCCA_IRQ 0x25 / NEWWORLD_ESCCB_IRQ
+# 0x24, the numbers of the real Heathrow and KeyLargo controllers, and Linux'
+# pmac_zilog takes each port's interrupt from its own ch-a or ch-b node.
+#
+# This changes what a Mac guest sees: channel A's line no longer reports
+# channel B's events. That matches the separate lines of the hardware, and
+# pmac_zilog does not mind, because its handler serves both channels from RR3
+# on every call. Other Mac guests (Mac OS 9, OS X) were not tried. The NeXT
+# machine also uses the ESCC; its wiring was not checked.
+#
+# Measured on 11.1.0, SS-20 with -smp 4, a linux-next kernel, four guests at a
+# time, patched and unpatched rounds alternating: unpatched 4 of 40 boots hung
+# as above, patched 0 of 40. The code dates back at least to the move to
+# hw/char/ in 2013 (49ab747f66) and comes from the original slavio_serial.
+# Still to be sent to qemu-devel.
+diff --git a/hw/char/escc.c b/hw/char/escc.c
+index 7aae627fb4..cd0594d19f 100644
+--- a/hw/char/escc.c
++++ b/hw/char/escc.c
+@@ -272,13 +272,19 @@ static int escc_update_irq_chn(ESCCChannelState *s)
+ 
+ static void escc_update_irq(ESCCChannelState *s)
+ {
+-    int irq;
++    int irq = escc_update_irq_chn(s);
++    int other = escc_update_irq_chn(s->otherchn);
+ 
+-    irq = escc_update_irq_chn(s);
+-    irq |= escc_update_irq_chn(s->otherchn);
+-
+-    trace_escc_update_irq(irq);
++    /*
++     * Each channel has its own output, so drive each from its own state.
++     * Putting the state of both on this channel's line alone leaves the
++     * other line at whatever it last saw: a board that ORs the two, as
++     * sun4m does, then keeps the interrupt asserted after both channels
++     * are quiet, and the guest takes it forever.
++     */
++    trace_escc_update_irq(irq | other);
+     qemu_set_irq(s->irq, irq);
++    qemu_set_irq(s->otherchn->irq, other);
+ }
+ 
+ static void escc_reset_chn(ESCCChannelState *s)
