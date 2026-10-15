@@ -54,3 +54,7 @@
 #   what the qemu-system-sparc in qemu-inst.tar.xz carries.  A distribution
 #   qemu does not have that patch, so this target cannot be run with
 #   "uc_devel -q --system-qemu" until the fix is upstream.
+#
+#   This image is uniprocessor.  An SMP kernel needs qemu-leon3-smp.patch as
+#   well (also in qemu-inst.tar.xz): without it the IRQMP reports no broadcast
+#   and the second CPU dies on its first swapa.
