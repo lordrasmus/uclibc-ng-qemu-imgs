@@ -1,0 +1,63 @@
+From af8d1e3bde76c7fa45fcd9cc56e3ec39b780b171 Mon Sep 17 00:00:00 2001
+From: Ramin Moussavi <ramin.moussavi@yacoub.de>
+Date: Tue, 20 Oct 2026 16:28:09 +0200
+Subject: [PATCH] sparc32: treat PAGE_NONE ptes as present
+
+SRMMU_PAGE_NONE has no SRMMU_VALID, so that every access to a PROT_NONE
+page faults, but pte_present() only looks at that bit.  A PROT_NONE pte
+of a populated page is therefore neither pte_none() nor pte_present(),
+which is how the core mm recognises a swap entry.  mprotect(), fork()
+and munmap() then treat the page as swapped out: "Bad swap file entry"
+and "Bad rss-counter state" in the log, a warning in __swap_duplicate()
+or zap_pte_range(), SIGBUS on the next access, and after a few rounds
+"kernel BUG at include/linux/swapops.h:504" in copy_page_range(), after
+which the machine hangs.
+
+Report such a pte as present.  It is told apart from a swap pte by its
+access bits: a swap pte has bits 0-5 clear, a PAGE_NONE pte has
+SRMMU_PRIV.  Test only SRMMU_PRIV_RDONLY, because SRMMU_WRITE is part of
+SRMMU_PRIV and pte_wrprotect() clears it when fork() write-protects a
+COW mapping.
+
+Found with a uClibc-ng test that makes a populated page PROT_NONE and
+forks; it hung leon3 under qemu after a few runs.  A reproducer that
+populates a page, makes it PROT_NONE, forks and reads the page back
+after mprotect(PROT_READ) gets SIGBUS on the first round without this
+change.  With it, on a 4-CPU SPARCstation 20 (next-20261014) and on
+leon3 (v6.18.37), the reproducer passes 200 rounds, the uClibc-ng test
+1800 runs, and the uClibc-ng test suite shows no new failures.
+
+Cc: stable@vger.kernel.org
+Assisted-by: Claude:claude-opus-5-5
+Signed-off-by: Ramin Moussavi <ramin.moussavi@yacoub.de>
+---
+ arch/sparc/include/asm/pgtable_32.h | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/arch/sparc/include/asm/pgtable_32.h b/arch/sparc/include/asm/pgtable_32.h
+index 749bed304efe..e31bd92faa52 100644
+--- a/arch/sparc/include/asm/pgtable_32.h
++++ b/arch/sparc/include/asm/pgtable_32.h
+@@ -133,9 +133,18 @@ static inline pmd_t *pud_pgtable(pud_t pud)
+ 	}
+ }
+ 
++/*
++ * A PAGE_NONE pte has no SRMMU_VALID, so that the MMU faults on every
++ * access, but the page is still mapped.  It is told apart from a swap pte
++ * by its access bits, SRMMU_PRIV, which a swap pte (bits 0-5 clear) never
++ * has.  Only SRMMU_PRIV_RDONLY is tested: SRMMU_WRITE is part of
++ * SRMMU_PRIV, and pte_wrprotect() clears it, as fork does on a COW
++ * mapping.
++ */
+ static inline int pte_present(pte_t pte)
+ {
+-	return ((pte_val(pte) & SRMMU_ET_MASK) == SRMMU_ET_PTE);
++	return (pte_val(pte) & SRMMU_ET_MASK) == SRMMU_ET_PTE ||
++	       (pte_val(pte) & SRMMU_PRIV_RDONLY) == SRMMU_PRIV_RDONLY;
+ }
+ 
+ static inline int pte_none(pte_t pte)
+-- 
+2.53.0
+
