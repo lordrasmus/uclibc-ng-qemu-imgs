@@ -1,0 +1,38 @@
+# kernel-csky.img      -- Linux 6.5.10 plus one patch (csky gcc 12.3.0)
+# kernel-csky-7.3.img  -- Linux 7.3    plus the same patch (csky gcc 15.2.0)
+#
+# The patch is "csky: add exception table entries for the cmpxchg trap",
+# not upstream yet.
+#
+# Why: on CPUs without ldex/stex (the ck810 here) every user-space atomic
+# goes through trap 2, csky_cmpxchg, which loads and stores the user word in
+# kernel mode without an exception table entry.  A fault there that the page
+# fault handler cannot resolve -- a fatal signal pending, or an unmapped
+# address -- oopses the kernel ("Unable to handle kernel paging request",
+# pc in csky_cmpxchg_ldw).  uClibc-ng's pthread/cancellation-points hits it
+# in its test of system(): the child faults on copy-on-write pages while the
+# cancelled parent's cleanup SIGKILLs it.  Drop the patch once a release has
+# it.
+#
+# Why two kernels: v6.11 changed csky's syscall 84 from sync_file_range to
+# sync_file_range2, which takes the flags before the offsets (kernel commit
+# 3339b99ef6fe, "csky, hexagon: fix broken sys_sync_file_range").  A uClibc-ng
+# built against older headers calls it the old way, and a 7.x kernel answers
+# EINVAL.  So kernel-csky.img stays at 6.5.10 for the target built against
+# 5.4.259 headers, and kernel-csky-7.3.img goes with the target built against
+# 7.3 headers.  v7.3 also has no csky vDSO any more.
+#
+# kernel-csky.img is the 6.5.10 image as before, rebuilt with the patch: same
+# config, same compiler, 16 bytes larger, all of them in __ex_table.
+#
+# Build:
+#
+#   <linux> = linux-6.5.10 or v7.3, with the patch applied
+#   cp kernel-csky.config (or kernel-csky-7.3.config) <obj>/.config
+#   make -C <linux> O=<obj> ARCH=csky CROSS_COMPILE=csky-openadk-linux-uclibcabiv2- olddefconfig
+#   make -C <linux> O=<obj> ARCH=csky CROSS_COMPILE=csky-openadk-linux-uclibcabiv2-
+#   csky-openadk-linux-uclibcabiv2-strip -o kernel-csky.img <obj>/vmlinux
+#
+# The rootfs is not passed with -initrd: CONFIG_INITRAMFS_SOURCE points at
+# ../kernel-xtensa.cpio, the 17 MiB placeholder that uc_devel and the CI
+# overwrite with the real rootfs.  It must lie next to <obj>.
