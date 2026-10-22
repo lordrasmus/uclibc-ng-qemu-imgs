@@ -1,5 +1,6 @@
 # kernel-csky.img      -- Linux 6.5.10 plus one patch (csky gcc 12.3.0)
-# kernel-csky-7.3.img  -- Linux 7.3    plus the same patch (csky gcc 15.2.0)
+# kernel-csky-7.3.img  -- Linux 7.3    plus the same patch and a second one
+#                         (csky gcc 15.2.0)
 #
 # The patch is "csky: add exception table entries for the cmpxchg trap",
 # not upstream yet.
@@ -13,6 +14,15 @@
 # in its test of system(): the child faults on copy-on-write pages while the
 # cancelled parent's cleanup SIGKILLs it.  Drop the patch once a release has
 # it.
+#
+# kernel-csky-7.3.img also has "csky: irq_work raises an interrupt only on
+# SMP", not upstream yet either.  csky's arch_irq_work_has_interrupt()
+# returns true even on uniprocessor kernels, where arch_irq_work_raise() is
+# the empty default, so a queued irq_work never runs.  Since v7.0-rc6
+# (a6fc88b22bc8, "srcu: Use irq_work to start GP in tiny SRCU") Tiny SRCU
+# starts every grace period that way, and synchronize_srcu() never returns:
+# close() of an inotify fd hung and tst-inotify timed out.  Found by
+# bisecting v6.5..v7.3.  6.5.10 does not need it.
 #
 # Why two kernels: v6.11 changed csky's syscall 84 from sync_file_range to
 # sync_file_range2, which takes the flags before the offsets (kernel commit
