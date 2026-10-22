@@ -1,28 +1,41 @@
-# kernel-csky.img      -- Linux 6.5.10 plus one patch (csky gcc 12.3.0)
-# kernel-csky-7.3.img  -- Linux 7.3    plus the same patch and a second one
+# kernel-csky.img      -- Linux 6.5.10 plus two patches (csky gcc 12.3.0)
+# kernel-csky-7.3.img  -- Linux 7.3    plus the same two and a third one
 #                         (csky gcc 15.2.0)
 #
-# The patch is "csky: add exception table entries for the cmpxchg trap",
-# not upstream yet.
+# None of the patches is upstream yet.
 #
-# Why: on CPUs without ldex/stex (the ck810 here) every user-space atomic
+# 1. "csky: add exception table entries for the cmpxchg trap"
+#
+# On CPUs without ldex/stex (the ck810 here) every user-space atomic
 # goes through trap 2, csky_cmpxchg, which loads and stores the user word in
 # kernel mode without an exception table entry.  A fault there that the page
 # fault handler cannot resolve -- a fatal signal pending, or an unmapped
 # address -- oopses the kernel ("Unable to handle kernel paging request",
 # pc in csky_cmpxchg_ldw).  uClibc-ng's pthread/cancellation-points hits it
 # in its test of system(): the child faults on copy-on-write pages while the
-# cancelled parent's cleanup SIGKILLs it.  Drop the patch once a release has
-# it.
+# cancelled parent's cleanup SIGKILLs it.
 #
-# kernel-csky-7.3.img also has "csky: irq_work raises an interrupt only on
-# SMP", not upstream yet either.  csky's arch_irq_work_has_interrupt()
-# returns true even on uniprocessor kernels, where arch_irq_work_raise() is
+# 2. "csky: mm: make PROT_NONE ptes present and drop stale hardware bits"
+#
+# csky's PAGE_NONE was a software marker without _PAGE_PRESENT, so the core
+# mm took a PROT_NONE pte for a swap entry ("BUG: Bad rss-counter state ...
+# MM_SWAPENTS"), and pte_modify() kept the hardware _PAGE_VALID/_PAGE_DIRTY
+# bits of the old protection.  A page that had been written and was then
+# made PROT_NONE stayed writable for the kernel: semctl(IPC_STAT) and read()
+# into it succeeded instead of failing with EFAULT, and tst-ipc-ctl-buffers
+# failed.  The fix makes PAGE_NONE present without any access rights, as
+# mips does, and recomputes the hardware bits in pte_modify().
+#
+# 3. kernel-csky-7.3.img only: "csky: irq_work raises an interrupt only on SMP"
+#
+# csky's arch_irq_work_has_interrupt() returns true even on uniprocessor kernels, where arch_irq_work_raise() is
 # the empty default, so a queued irq_work never runs.  Since v7.0-rc6
 # (a6fc88b22bc8, "srcu: Use irq_work to start GP in tiny SRCU") Tiny SRCU
 # starts every grace period that way, and synchronize_srcu() never returns:
 # close() of an inotify fd hung and tst-inotify timed out.  Found by
 # bisecting v6.5..v7.3.  6.5.10 does not need it.
+#
+# Drop each patch once a release has it.
 #
 # Why two kernels: v6.11 changed csky's syscall 84 from sync_file_range to
 # sync_file_range2, which takes the flags before the offsets (kernel commit
@@ -32,12 +45,12 @@
 # 5.4.259 headers, and kernel-csky-7.3.img goes with the target built against
 # 7.3 headers.  v7.3 also has no csky vDSO any more.
 #
-# kernel-csky.img is the 6.5.10 image as before, rebuilt with the patch: same
-# config, same compiler, 16 bytes larger, all of them in __ex_table.
+# kernel-csky.img is the 6.5.10 image as before, rebuilt with the patches:
+# same config, same compiler.
 #
 # Build:
 #
-#   <linux> = linux-6.5.10 or v7.3, with the patch applied
+#   <linux> = linux-6.5.10 or v7.3, with the patches applied
 #   cp kernel-csky.config (or kernel-csky-7.3.config) <obj>/.config
 #   make -C <linux> O=<obj> ARCH=csky CROSS_COMPILE=csky-openadk-linux-uclibcabiv2- olddefconfig
 #   make -C <linux> O=<obj> ARCH=csky CROSS_COMPILE=csky-openadk-linux-uclibcabiv2-
