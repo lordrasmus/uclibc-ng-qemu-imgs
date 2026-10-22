@@ -1,0 +1,33 @@
+# kernel-microblazeel.img, kernel-microblaze.img -- Linux 7.3 plus five patches
+#
+# Both images are Linux v7.3 with the microblaze signal series applied, which
+# is in linux-next (Michal Simek's 'next' branch) and expected in mainline
+# with v7.4:
+#
+#   730e01d93249  microblaze: wire up sigaltstack
+#   c5947d28c209  microblaze: reserve the ABI argument-home area in the signal frame
+#   da6829138a39  microblaze: don't clobber r3/r4 restored by rt_sigreturn
+#   c35d40a3efd2  microblaze: restore the ABI argument home area below pt_regs (PTO)
+#   ca35dd21a5f8  microblaze: preserve the MSR carry flags across signals
+#
+# Why not a plain release: with these configs a plain v7.2 or v7.3 does not
+# get through the first exec of userspace ("/lib/libc.so.0 is not an ELF
+# file", init dies), and v6.5.10, used before, crashes now and then in a
+# thread cancelled out of a blocking syscall (__tls_get_addr with a broken
+# r21; cancellation-points, test of system(), about 2% of runs under load).
+# With the series, cancellation-points under load: no failure in 780 runs on
+# v7.2, 953 on v7.3 little endian and 473 on v7.3 big endian; the full suite
+# passes on both (892 passed, 0 failed).  Switch to a plain release once
+# v7.4 is out.
+#
+# Build (toolchain as in the CI target: LE gcc 16.2.0, BE gcc 15.3.0):
+#
+#   git -C <linux> checkout v7.3 && git -C <linux> am <the five patches>
+#   cp kernel-microblazeel.config <obj>/.config
+#   make -C <linux> O=<obj> ARCH=microblaze CROSS_COMPILE=microblazeel-openadk-linux-uclibc- olddefconfig
+#   make -C <linux> O=<obj> ARCH=microblaze CROSS_COMPILE=microblazeel-openadk-linux-uclibc- linux.bin
+#   cp <obj>/arch/microblaze/boot/linux.bin kernel-microblazeel.img
+#
+# The same with kernel-microblaze.config and microblaze-openadk-linux-uclibc-
+# for big endian.  The .config files here are the effective ones from that
+# build.  The rootfs comes in with -initrd.
