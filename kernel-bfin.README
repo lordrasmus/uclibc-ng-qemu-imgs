@@ -1,0 +1,41 @@
+# kernel-bfin.img -- Linux 4.9.156 for the ADSP-BF537 (Blackfin, noMMU)
+#
+# Runs on qemu-system-bfin -M bf537-stamp from the qemu fork (lordrasmus/qemu,
+# branch uclibc-ng); upstream qemu never had Blackfin.  The image is the
+# stripped vmlinux (ELF), which the machine loads and starts in the reset
+# event with the command line in R0, as the boot loader would.
+#
+#   qemu-system-bfin -M bf537-stamp -m 256M -nographic -kernel kernel-bfin.img \
+#     -initrd rootfs.img.xz -append console=ttyBF0,57600
+#
+# -m 256M: the unpacked FLAT test rootfs is about 117 MB and lives in RAM.
+# The STAMP has 64 MiB and the BF537's controller goes to 128 MiB; the machine
+# reports 256 MiB through EBIU_SDBCTL with the encoding of the larger parts,
+# which is where Linux takes its memory size from.
+#
+# -initrd: Blackfin Linux had no way to be handed an initrd.  The machine
+# loads the image below the uncached DMA area at the top of memory and appends
+# "initrd=start,size" to the command line; kernel-bfin-initrd.patch teaches
+# the kernel to read it and reserve the area, as arm and arc do.
+#
+# Build: kernel-bfin.config is BF537-STAMP_defconfig with
+#   - the serial driver in PIO mode on UART0 as console
+#   - no MTD, SPI, I2C, sound, watchdog or Ethernet (the machine has none)
+#   - DEVTMPFS, SIGNALFD, TIMERFD, BLK_DEV_INITRD with an empty
+#     INITRAMFS_SOURCE
+#   - CMDLINE_BOOL off: a built-in command line would replace the one in R0
+#   - BFIN_EXTMEM_ICACHEABLE off: with it, anomaly 05000263 caps the usable
+#     memory at 60 MB; the machine models no caches anyway
+#
+#   cd linux-4.9.156
+#   patch -p1 < kernel-bfin-initrd.patch
+#   cp kernel-bfin.config .config
+#   make ARCH=blackfin CROSS_COMPILE=bfin-openadk-uclinux-uclibc- \
+#        HOSTCFLAGS=-fcommon olddefconfig vmlinux
+#   bfin-openadk-uclinux-uclibc-strip -o kernel-bfin.img vmlinux
+#
+# HOSTCFLAGS=-fcommon because 4.9's dtc does not build with gcc >= 10 otherwise.
+# 4.9 is the newest usable kernel: arch/blackfin was removed in v4.17.
+#
+# Result with the CI's FLAT rootfs: 341 passed, 0 failed, 16 skipped in about
+# 2.5 minutes.

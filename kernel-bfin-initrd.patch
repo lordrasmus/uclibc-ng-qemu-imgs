@@ -1,0 +1,59 @@
+# blackfin: take an initrd from "initrd=<start>,<size>" on the command line.
+# Blackfin Linux has no way to receive an initrd: the boot loader passes only
+# the command line in R0, and unlike arc or arm, arch/blackfin has no
+# "initrd=" parameter.  Add one: the qemu fork's bf537-stamp machine loads
+# -initrd below the uncached DMA area at the top of SDRAM and appends
+# "initrd=<physical start>,<size>".  Blackfin parses its early parameters
+# itself in parse_cmdline_early(), before the memory layout is set up, so
+# read it there and reserve the range once bootmem owns the memory.
+--- a/arch/blackfin/kernel/setup.c
++++ b/arch/blackfin/kernel/setup.c
+@@ -5,6 +5,7 @@
+  */
+ 
+ #include <linux/delay.h>
++#include <linux/initrd.h>
+ #include <linux/console.h>
+ #include <linux/bootmem.h>
+ #include <linux/seq_file.h>
+@@ -531,6 +532,18 @@
+ 			} else if (!memcmp(to, "memmap=", 7)) {
+ 				to += 7;
+ 				parse_memmap(to);
++#ifdef CONFIG_BLK_DEV_INITRD
++			} else if (!memcmp(to, "initrd=", 7)) {
++				unsigned long start, size;
++
++				to += 7;
++				start = memparse(to, &to);
++				if (*to == ',') {
++					size = memparse(to + 1, &to);
++					initrd_start = start;
++					initrd_end = start + size;
++				}
++#endif
+ 			}
+ 		}
+ 		c = *(to++);
+@@ -803,6 +816,21 @@
+ 	reserve_bootmem(CONFIG_PHY_RAM_BASE_ADDRESS,
+ 		memory_start + bootmap_size + PAGE_SIZE - 1 - CONFIG_PHY_RAM_BASE_ADDRESS,
+ 		BOOTMEM_DEFAULT);
++
++#ifdef CONFIG_BLK_DEV_INITRD
++	/* an initrd the boot loader placed with "initrd=start,size" */
++	if (initrd_start) {
++		if (initrd_start < memory_start + bootmap_size ||
++		    initrd_end > memory_end) {
++			pr_err("initrd %#lx-%#lx is outside usable memory, ignored\n",
++			       initrd_start, initrd_end);
++			initrd_start = initrd_end = 0;
++		} else {
++			reserve_bootmem(initrd_start, initrd_end - initrd_start,
++					BOOTMEM_DEFAULT);
++		}
++	}
++#endif
+ }
+ 
+ #define EBSZ_TO_MEG(ebsz) \
