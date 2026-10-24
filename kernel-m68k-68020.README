@@ -1,0 +1,19 @@
+# kernel-m68k-68020.img -- Linux 6.1.60 for a 68020 with 68851 MMU and 68881
+#
+# Runs on qemu-system-m68k -M virt -cpu m68020 from the qemu fork
+# (lordrasmus/qemu, branch uclibc-ng); upstream qemu has no 68851/68030 MMU,
+# so a 68020 cannot run Linux there.  The image is the plain vmlinux (ELF).
+#
+#   qemu-system-m68k -M virt -cpu m68020 -m 512M -nographic \
+#     -kernel kernel-m68k-68020.img -initrd rootfs.img.xz
+#
+# Build: kernel-m68k-68020.config is kernel-m68k.config (the 68040 target's)
+# with CONFIG_M68020 and CONFIG_M68030 added; the source is unpatched.
+#
+#   cd linux-6.1.60
+#   cp kernel-m68k-68020.config .config
+#   make ARCH=m68k CROSS_COMPILE=m68k-openadk-linux-uclibc- \
+#        KCFLAGS=-m68020 KAFLAGS=-m68020 olddefconfig vmlinux
+#
+# KCFLAGS/KAFLAGS: the toolchain defaults to the 68040, and gas rejects the
+# 68851's pflusha without -m68020.
