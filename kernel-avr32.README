@@ -1,0 +1,31 @@
+# kernel-avr32.img -- Linux 4.4.302 for the AP7000 (atngw100) machine
+#
+# Runs on qemu-system-avr32 -M atngw100 from the qemu fork (lordrasmus/qemu,
+# branch uclibc-ng); upstream qemu never had avr32.  The image is the plain
+# vmlinux (ELF).
+#
+#   qemu-system-avr32 -M atngw100 -m 64M -nographic -kernel kernel-avr32.img \
+#     -initrd rootfs.img.xz -append console=ttyS0
+#
+# -m 64M: the rootfs is unpacked into tmpfs, which gets half of the memory;
+# the uClibc-ng test rootfs does not fit into half of the board's 32 MiB.
+#
+# 4.4 is the newest usable kernel: arch/avr32 was removed in v4.12, and the
+# CI's uClibc-ng headers are 4.4.302.
+#
+# Build: kernel-avr32.config is a small atngw100 config (serial console,
+# DEVTMPFS, SYSVIPC, POSIX_MQUEUE, networking with UNIX/INET/PACKET for the
+# socket tests, BLK_DEV_INITRD).
+#
+#   cd linux-4.4.302
+#   for p in kernel-avr32-uaccess-align.patch kernel-readahead-tmpfs-4.4.patch
+#   do patch -p1 < $p; done
+#   cp kernel-avr32.config .config
+#   make ARCH=avr32 CROSS_COMPILE=avr32-openadk-linux-uclibc- \
+#        HOSTCFLAGS=-fcommon olddefconfig vmlinux
+#
+# The toolchain is the CI's avr32 gcc 4.4.7 toolchain.
+#
+# Known: math/c99_test hangs, because libgcc's __avr32_f64_div (gcc 4.4.7
+# avr32 support patch) returns 0 for inf / x, and uClibc-ng's printf finds
+# infinity with x == x / 4.  That is a toolchain bug, not the kernel's.
