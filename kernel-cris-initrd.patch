@@ -1,0 +1,55 @@
+# cris: take an initrd from "initrd=<start>,<size>" on the command line.
+# Linux 4.9 on cris has no way to receive an initrd: the Axis boot protocol
+# passes only r8 (DRAM is set up) and r10/r11 (command line), and unlike arc
+# or arm, arch/cris has no "initrd=" parameter.  Add one: the qemu fork's
+# etrax100lx machine loads -initrd to the top of DRAM and appends
+# "initrd=<physical start>,<size>".  setup_arch() does not parse early
+# parameters, so this runs from start_kernel() afterwards, while bootmem
+# still owns the memory, and reserves the range there before using it.
+--- a/arch/cris/kernel/setup.c	2026-10-24 15:44:17.036465182 +0200
++++ b/arch/cris/kernel/setup.c	2026-10-24 15:44:30.133783547 +0200
+@@ -13,6 +13,7 @@
+ #include <linux/init.h>
+ #include <linux/mm.h>
+ #include <linux/bootmem.h>
++#include <linux/initrd.h>
+ #include <asm/pgtable.h>
+ #include <linux/seq_file.h>
+ #include <linux/screen_info.h>
+@@ -173,6 +174,36 @@
+ 	strcpy(init_utsname()->machine, cris_machine_name);
+ }
+ 
++#ifdef CONFIG_BLK_DEV_INITRD
++/*
++ * "initrd=<start>,<size>" on the command line: the boot loader has put an
++ * initrd there.  setup_arch() does not parse early parameters, so this runs
++ * from start_kernel() afterwards, while bootmem is still in charge of the
++ * memory.  Like bootmem itself it works with the kernel's addresses.
++ */
++static int __init early_initrd(char *p)
++{
++	unsigned long start, size;
++	char *endp;
++
++	start = memparse(p, &endp);
++	if (*endp != ',')
++		return 0;
++	size = memparse(endp + 1, NULL);
++
++	start = (unsigned long)__va(start);
++	if (reserve_bootmem(start, size, BOOTMEM_EXCLUSIVE)) {
++		pr_err("initrd at %lx+%lx overlaps memory in use, ignored\n",
++		       start, size);
++		return 0;
++	}
++	initrd_start = start;
++	initrd_end = start + size;
++	return 0;
++}
++early_param("initrd", early_initrd);
++#endif
++
+ #ifdef CONFIG_PROC_FS
+ static void *c_start(struct seq_file *m, loff_t *pos)
+ {
