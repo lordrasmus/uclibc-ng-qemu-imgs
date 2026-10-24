@@ -1,0 +1,36 @@
+# readahead(2) on tmpfs for kernels before v4.19 (cris 4.9; avr32/h8300 4.4
+# need it too): backport of the effect of 3d8f7615319b ("vfs: implement
+# readahead(2) using POSIX_FADV_WILLNEED").
+# Before v4.19 readahead returned force_page_cache_readahead()'s -EINVAL for
+# any filesystem without ->readpage(s), tmpfs among them -- and the rootfs is
+# tmpfs here, so every readahead() in the test suite failed.  Since v4.19 it
+# goes through fadvise(POSIX_FADV_WILLNEED), which ignores that result and
+# returns 0, and it refuses non-regular files with -EINVAL instead.  4.9's
+# fadvise64 already ignores the result; the full backport would also need
+# vfs_fadvise(), which only matters for filesystems with their own fadvise.
+--- a/mm/readahead.c	2026-10-24 15:13:08.190989836 +0200
++++ b/mm/readahead.c	2026-10-24 15:13:21.133306048 +0200
+@@ -553,7 +553,10 @@
+ 	if (dax_mapping(mapping))
+ 		return 0;
+ 
+-	return force_page_cache_readahead(mapping, filp, index, nr);
++	/* like fadvise(POSIX_FADV_WILLNEED): a filesystem that cannot read
++	 * ahead (tmpfs) is no error */
++	force_page_cache_readahead(mapping, filp, index, nr);
++	return 0;
+ }
+ 
+ SYSCALL_DEFINE3(readahead, int, fd, loff_t, offset, size_t, count)
+@@ -569,7 +572,10 @@
+ 			pgoff_t start = offset >> PAGE_SHIFT;
+ 			pgoff_t end = (offset + count - 1) >> PAGE_SHIFT;
+ 			unsigned long len = end - start + 1;
+-			ret = do_readahead(mapping, f.file, start, len);
++
++			ret = -EINVAL;
++			if (S_ISREG(file_inode(f.file)->i_mode))
++				ret = do_readahead(mapping, f.file, start, len);
+ 		}
+ 		fdput(f);
+ 	}
