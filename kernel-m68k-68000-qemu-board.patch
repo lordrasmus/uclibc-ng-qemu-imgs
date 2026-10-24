@@ -1,0 +1,177 @@
+diff -Nru a/arch/m68k/68000/head.S b/arch/m68k/68000/head.S
+--- a/arch/m68k/68000/head.S	2026-10-24 23:14:48.628591847 +0200
++++ b/arch/m68k/68000/head.S	2026-10-24 23:14:48.631591923 +0200
+@@ -32,6 +32,9 @@
+ .global _ramvec
+ .global _ramstart
+ .global _ramend
++#ifdef CONFIG_UBOOT
++.global _init_sp
++#endif
+ 
+ #if defined(CONFIG_PILOT) || defined(CONFIG_INIT_LCD)
+ .global bootlogo_bits
+@@ -55,6 +58,10 @@
+ 	.long	0
+ _ramend:
+ 	.long	0
++#ifdef CONFIG_UBOOT
++_init_sp:
++	.long	0
++#endif
+ 
+ __HEAD
+ 
+@@ -76,6 +83,9 @@
+ #endif /* CONFIG_PILOT */
+ 
+ 	movew	#0x2700, %sr			/* disable all interrupts */
++#ifdef CONFIG_UBOOT
++	movel	%sp, _init_sp			/* the boot loader's arguments */
++#endif
+ 
+ /*****************************************************************************
+  * Setup PLL and wait for it to settle (in 68x328 cpu's).
+diff -Nru a/arch/m68k/68000/m68328.c b/arch/m68k/68000/m68328.c
+--- a/arch/m68k/68000/m68328.c	2026-10-24 23:14:48.645592278 +0200
++++ b/arch/m68k/68000/m68328.c	2026-10-24 23:14:48.648592353 +0200
+@@ -58,6 +58,8 @@
+ 	init_ucsimm(command, len);
+ #elif defined(CONFIG_DRAGEN2)
+ 	init_dragen2(command, len);
++#elif defined(CONFIG_M68000_QEMU)
++	init_qemu(command, len);
+ #endif
+ }
+ 
+diff -Nru a/arch/m68k/68000/m68328.h b/arch/m68k/68000/m68328.h
+--- a/arch/m68k/68000/m68328.h	2026-10-24 23:14:48.661592682 +0200
++++ b/arch/m68k/68000/m68328.h	2026-10-24 23:14:48.663592733 +0200
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: GPL-2.0
+ void init_dragen2(char *command, int size);
+ void init_ucsimm(char *command, int size);
++void init_qemu(char *command, int size);
+ struct rtc_time;
+ int m68328_hwclk(int set, struct rtc_time *t);
+diff -Nru a/arch/m68k/68000/Makefile b/arch/m68k/68000/Makefile
+--- a/arch/m68k/68000/Makefile	2026-10-24 23:14:48.608591340 +0200
++++ b/arch/m68k/68000/Makefile	2026-10-24 23:14:48.610591391 +0200
+@@ -15,6 +15,7 @@
+ 
+ obj-$(CONFIG_DRAGEN2)	+= dragen2.o
+ obj-$(CONFIG_UCSIMM)	+= ucsimm.o
++obj-$(CONFIG_M68000_QEMU)	+= qemu.o
+ obj-$(CONFIG_UCDIMM)	+= ucsimm.o
+ 
+ obj-y			+= head.o
+diff -Nru a/arch/m68k/68000/qemu.c b/arch/m68k/68000/qemu.c
+--- a/arch/m68k/68000/qemu.c	1970-01-01 01:00:00.000000000 +0100
++++ b/arch/m68k/68000/qemu.c	2026-10-24 23:14:48.679593139 +0200
+@@ -0,0 +1,40 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * QEMU "m68328" machine: a 16550 UART on interrupt 2 (the 68328 UART line)
++ */
++#include <linux/init.h>
++#include <linux/platform_device.h>
++#include <linux/serial_8250.h>
++#include <asm/MC68328.h>
++#include "m68328.h"
++
++#define QEMU_UART_BASE	0xffffe000
++#define QEMU_UART_CLK	1843200
++
++static struct plat_serial8250_port qemu_uart_data[] = {
++	{
++		.mapbase	= QEMU_UART_BASE,
++		.membase	= (void __iomem *)(QEMU_UART_BASE),
++		.irq		= UART_IRQ_NUM,
++		.uartclk	= QEMU_UART_CLK,
++		.iotype		= UPIO_MEM,
++		.flags		= UPF_BOOT_AUTOCONF,
++	},
++	{ },
++};
++
++static struct platform_device qemu_uart = {
++	.name			= "serial8250",
++	.id			= PLAT8250_DEV_PLATFORM,
++	.dev.platform_data	= qemu_uart_data,
++};
++
++static int __init qemu_devices_init(void)
++{
++	return platform_device_register(&qemu_uart);
++}
++arch_initcall(qemu_devices_init);
++
++void __init init_qemu(char *command, int size)
++{
++}
+diff -Nru a/arch/m68k/configs/qemu68000_defconfig b/arch/m68k/configs/qemu68000_defconfig
+--- a/arch/m68k/configs/qemu68000_defconfig	1970-01-01 01:00:00.000000000 +0100
++++ b/arch/m68k/configs/qemu68000_defconfig	2026-10-24 23:14:48.700593671 +0200
+@@ -0,0 +1,35 @@
++# CONFIG_MMU is not set
++CONFIG_M68KCLASSIC=y
++CONFIG_M68000_QEMU=y
++CONFIG_RAMBASE=0x0
++CONFIG_RAMSIZE=0x08000000
++CONFIG_VECTORBASE=0x0
++CONFIG_RAMKERNEL=y
++CONFIG_UBOOT=y
++CONFIG_BINFMT_FLAT=y
++CONFIG_BLK_DEV_INITRD=y
++CONFIG_RD_GZIP=y
++CONFIG_RD_XZ=y
++CONFIG_DEVTMPFS=y
++CONFIG_DEVTMPFS_MOUNT=y
++CONFIG_TMPFS=y
++CONFIG_PROC_FS=y
++CONFIG_SYSFS=y
++CONFIG_TTY=y
++CONFIG_SERIAL_8250=y
++CONFIG_SERIAL_8250_CONSOLE=y
++CONFIG_SERIAL_8250_NR_UARTS=1
++CONFIG_SERIAL_8250_RUNTIME_UARTS=1
++CONFIG_PRINTK=y
++CONFIG_SYSVIPC=y
++CONFIG_POSIX_MQUEUE=y
++CONFIG_FUTEX=y
++CONFIG_EVENTFD=y
++CONFIG_SIGNALFD=y
++CONFIG_TIMERFD=y
++CONFIG_INOTIFY_USER=y
++CONFIG_NET=y
++CONFIG_UNIX=y
++CONFIG_INET=y
++# CONFIG_NETDEVICES is not set
++# CONFIG_MODULES is not set
+diff -Nru a/arch/m68k/Kconfig.machine b/arch/m68k/Kconfig.machine
+--- a/arch/m68k/Kconfig.machine	2026-10-24 23:14:48.574590479 +0200
++++ b/arch/m68k/Kconfig.machine	2026-10-24 23:14:48.590590884 +0200
+@@ -159,6 +159,14 @@
+ 	help
+ 	  Support the bugs of Xcopilot.
+ 
++config M68000_QEMU
++	bool "QEMU m68328 board support"
++	depends on !MMU
++	select M68328
++	help
++	  Support for QEMU's "m68328" machine: a 68000 with the MC68328
++	  interrupt controller and timers, and a 16550 UART as console.
++
+ config UCSIMM
+ 	bool "uCsimm module support"
+ 	depends on !MMU
+@@ -328,7 +336,7 @@
+ 
+ config UBOOT
+ 	bool "Support for U-Boot command line parameters"
+-	depends on COLDFIRE
++	depends on COLDFIRE || M68000
+ 	help
+ 	  If you say Y here kernel will try to collect command
+ 	  line parameters from the initial u-boot stack.

@@ -1,0 +1,36 @@
+# kernel-m68k-68000.img -- Linux 6.18.37 for a plain 68000 (no MMU, no FPU)
+#
+# Runs on qemu-system-m68k -M m68328 from the qemu fork (lordrasmus/qemu,
+# branch uclibc-ng): a 68000 with the MC68328's interrupt controller and
+# timer, a 16550 at 0xffffe000 on IRQ 2 and 128 MiB of RAM.  Upstream qemu
+# has no 68000 machine.  The image is the plain vmlinux (ELF).
+#
+#   qemu-system-m68k -M m68328 -nographic -kernel kernel-m68k-68000.img \
+#     -initrd rootfs.img -append console=ttyS0,115200
+#
+# The rootfs goes in uncompressed: without an MMU the kernel cannot get a
+# large enough contiguous buffer for the xz dictionary.
+#
+# Build: two separate patches, then kernel-m68k-68000.config.
+#
+# - kernel-m68k-68000-qemu-board.patch: CONFIG_M68000_QEMU for the m68328
+#   machine (setup in arch/m68k/68000/qemu.c, UBOOT-style command line and
+#   initrd for the 68000, the initial stack pointer) and qemu68000_defconfig.
+# - kernel-m68k-68000-tinfo-flags.patch: upstream 2c6805145e16 ("m68k: Fix
+#   task info flags handling for 68000", in v7.1, not in 6.18).  The return
+#   to user space read the upper word of thread_info->flags, where no TIF bit
+#   lives, so signals were never delivered and preemption never happened on
+#   the way out -- a handler never ran, and console output stalled.
+#
+#   cd linux-6.18.37
+#   for p in kernel-m68k-68000-qemu-board.patch \
+#            kernel-m68k-68000-tinfo-flags.patch; do patch -p1 < $p; done
+#   cp kernel-m68k-68000.config .config
+#   make ARCH=m68k CROSS_COMPILE=m68k-openadk-uclinux-uclibc- \
+#        olddefconfig vmlinux
+#
+# The toolchain is the CI's m68k-68000 toolchain (gcc 15.3.0, FLAT).
+#
+# Known: strtod, strtold, tst-printf-strtod and basic-test fail.  libgcc for
+# the 68000 does long double arithmetic in double precision
+# (libgcc/config/m68k/fpgnulib.c), so 64-bit mantissas do not survive.
