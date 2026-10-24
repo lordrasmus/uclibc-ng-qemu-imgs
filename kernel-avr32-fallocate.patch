@@ -1,0 +1,31 @@
+# avr32: pass fallocate's 64-bit arguments where sys_fallocate expects them
+# (Linux 4.4).  sys_fallocate(int fd, int mode, loff_t offset, loff_t len)
+# takes offset in r9:r8 (r10 stays unused, register pairs are aligned) and
+# len as 8 bytes on the stack.  User space passes fd, mode, offset high/low,
+# len high/low in r12, r11, r10, r9, r5, r3, and the generic stub pushed only
+# r3: offset was read one register off and the low word of len was the saved
+# return address, so every fallocate()/posix_fallocate() failed with EFBIG.
+# Found by the uClibc-ng tests tst-fallocate and tst-posix_fallocate.
+--- a/arch/avr32/kernel/syscall-stubs.S
++++ b/arch/avr32/kernel/syscall-stubs.S
+@@ -92,10 +92,18 @@
+ 	.global __sys_fallocate
+ 	.type	__sys_fallocate,@function
+ __sys_fallocate:
++	/*
++	 * sys_fallocate(int fd, int mode, loff_t offset, loff_t len) takes
++	 * offset in r9:r8 and len on the stack, but user space passes
++	 * offset in r10/r9 and len in r5/r3 (high word first).
++	 */
+ 	pushm	lr
+-	st.w	--sp, ARG6
++	st.w	--sp, r3
++	st.w	--sp, r5
++	mov	r8, r9
++	mov	r9, r10
+ 	call	sys_fallocate
+-	sub	sp, -4
++	sub	sp, -8
+ 	popm	pc
+ 
+ 	.global __sys_fanotify_mark

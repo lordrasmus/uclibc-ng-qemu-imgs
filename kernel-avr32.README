@@ -18,7 +18,8 @@
 # socket tests, BLK_DEV_INITRD).
 #
 #   cd linux-4.4.302
-#   for p in kernel-avr32-uaccess-align.patch kernel-readahead-tmpfs-4.4.patch
+#   for p in kernel-avr32-uaccess-align.patch kernel-avr32-fallocate.patch \
+#            kernel-readahead-tmpfs-4.4.patch
 #   do patch -p1 < $p; done
 #   cp kernel-avr32.config .config
 #   make ARCH=avr32 CROSS_COMPILE=avr32-openadk-linux-uclibc- \
@@ -26,6 +27,7 @@
 #
 # The toolchain is the CI's avr32 gcc 4.4.7 toolchain.
 #
-# Known: math/c99_test hangs, because libgcc's __avr32_f64_div (gcc 4.4.7
-# avr32 support patch) returns 0 for inf / x, and uClibc-ng's printf finds
-# infinity with x == x / 4.  That is a toolchain bug, not the kernel's.
+# Known: the math tests fail on soft-float results.  The avr32 support
+# patch's libgcc (lib1funcs.S) has several rounding/overflow bugs; a model of
+# the architecture manual's semantics reproduces them bit for bit, so they
+# are toolchain bugs, not the kernel's or qemu's.
