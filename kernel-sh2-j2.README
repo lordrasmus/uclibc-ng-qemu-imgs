@@ -1,0 +1,41 @@
+kernel-sh2-j2.img: Linux 6.18.37 for the J-Core J2 (sh2eb, no MMU)
+==================================================================
+
+Runs on the J2 machine of the uclibc-ng qemu fork (lordrasmus/qemu,
+branch uclibc-ng, hw/sh4/j2.c), which follows the Numato Mimas V2 device
+tree:
+
+  qemu-system-sh4eb -M j2 -m 256M -nographic -kernel kernel.img -initrd rootfs.img
+
+The board passes its own device tree and the memory size from -m; the
+command line comes from the kernel (console=ttyUL0 earlycon).
+
+Rebuilding
+----------
+
+  tar -xaf linux-6.18.37.tar.xz && cd linux-6.18.37
+  patch -p1 < kernel-sh2-j2.patch
+  cp kernel-sh2-j2.config .config
+  make ARCH=sh CROSS_COMPILE=sh2eb-openadk-linux-uclibc- olddefconfig vmlinux
+  sh2eb-openadk-linux-uclibc-objcopy -R .reginfo -R .notes -R .note -R .comment \
+      -R .mdebug -R .note.gnu.build-id -S vmlinux kernel-sh2-j2.img
+
+The config is j2_defconfig plus BLK_DEV_INITRD, RD_GZIP, RD_XZ, TMPFS and
+PRINT_FATAL_SIGNALS.
+
+The toolchain has to be a J2 one: openadk system numato-mimasv2 (CPU j2,
+-mj2, binutils 2.42, gcc 10.5.0; built from lordrasmus/openadk 76066e919).
+j2_defconfig has SMP, and the SMP code uses the J2-only cas.l, which the
+generic sh2 toolchain the CI builds uClibc-ng with (-m2, binutils 2.39)
+does not assemble.
+
+Two things that look like options but are not:
+
+- Without SMP, 6.18 does not boot on J2: it stops in pcpu_setup_first_chunk
+  with "percpu: can't handle more than one group" and kernel BUG at
+  mm/percpu.c:2591, before the console comes up.
+- Without the __ffs() part of the patch, a gcc-10 build hangs after
+  "SMP: Total of 1 processors activated" (see the patch header).
+
+The userland is FLAT; it needs the BINFMT_FLAT_NO_DATA_START_OFFSET part of
+the patch, otherwise every program with a GOT crashes right after start.

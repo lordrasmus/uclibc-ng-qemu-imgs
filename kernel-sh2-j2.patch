@@ -1,0 +1,37 @@
+# sh: select BINFMT_FLAT_NO_DATA_START_OFFSET for noMMU
+# Waldemar Brodkorb's patch, v2 on linux-sh 2026-10-21 (Message-ID
+# <atgBKmRydeRteQ0T@waldemar-brodkorb.de>, Reviewed-by John Paul Adrian Glaubitz).
+# binfmt_flat puts the data segment at ALIGN(data_start + 4, 0x20), but SH PIC
+# code finds its GOT pc-relative and so reads the unrelocated copy 0x20 bytes
+# below the one the kernel relocated. libgcc is PIC on sh*-linux, so almost
+# every FLAT program has a GOT and crashes right after start without this.
+--- linux-6.18.37/arch/sh/Kconfig	2026-10-24 14:32:04.569545738 +0200
++++ ../linux-6.18.37/arch/sh/Kconfig	2026-10-24 14:32:04.596546405 +0200
+@@ -15,6 +15,7 @@
+ 	select ARCH_MIGHT_HAVE_PC_PARPORT
+ 	select ARCH_WANT_IPC_PARSE_VERSION
+ 	select ARCH_NEED_CMPXCHG_1_EMU
++	select BINFMT_FLAT_NO_DATA_START_OFFSET if !MMU
+ 	select CPU_NO_EFFICIENT_FFS
+ 	select DMA_DECLARE_COHERENT
+ 	select GENERIC_ATOMIC64
+
+# sh: make the __ffs() loop volatile.
+# __ffs() is __attribute_const__ and its asm (shlr / bf/s until a set bit
+# falls out) is not volatile, so gcc may treat it as side-effect free and
+# hoist it above the caller's zero check. It never ends for 0. gcc 10.5 does
+# exactly that in find_next_bit(): with NR_CPUS=2 (j2_defconfig) and one CPU,
+# for_each_possible_cpu() in arch_update_cpu_topology() spins in __ffs(0) and
+# the kernel hangs after "SMP: Total of 1 processors activated". Unchanged in
+# 7.3. Local fix, not sent upstream.
+--- linux-6.18.37/arch/sh/include/asm/bitops.h	2026-10-24 14:32:04.571545787 +0200
++++ ../linux-6.18.37/arch/sh/include/asm/bitops.h	2026-10-24 14:32:04.599546479 +0200
+@@ -48,7 +48,7 @@
+ {
+ 	unsigned long result;
+ 
+-	__asm__("1:\n\t"
++	__asm__ __volatile__("1:\n\t"
+ 		"shlr	%1\n\t"
+ 		"bf/s	1b\n\t"
+ 		" add	#1, %0"
