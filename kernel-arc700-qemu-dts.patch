@@ -1,0 +1,62 @@
+--- a/arch/arc/boot/dts/qemu_arc700.dts	1970-01-01 01:00:00.000000000 +0100
++++ b/arch/arc/boot/dts/qemu_arc700.dts	1970-01-01 01:00:00.000000000 +0100
+@@ -0,0 +1,59 @@
++/*
++ * Device tree for qemu-system-arc's "virt" board with an ARC700 (ARCompact)
++ * core.  Derived from nsimosci.dts; the differences are the machine's actual
++ * wiring: the 8250 sits at 0xf0000000 on interrupt 24 (hw/arc/virt.c), and
++ * there is no PGU, no PS/2 and no ezchip ethernet.
++ */
++/dts-v1/;
++
++/include/ "skeleton.dtsi"
++
++/ {
++	model = "snps,qemu-arc700";
++	compatible = "snps,nsimosci";
++	#address-cells = <1>;
++	#size-cells = <1>;
++	interrupt-parent = <&core_intc>;
++
++	chosen {
++		bootargs = "earlycon=uart8250,mmio32,0xf0000000,115200n8 console=ttyS0,115200n8 print-fatal-signals=1 lpj=3833856";
++	};
++
++	aliases {
++		serial0 = &uart0;
++	};
++
++	fpga {
++		compatible = "simple-bus";
++		#address-cells = <1>;
++		#size-cells = <1>;
++		ranges;
++
++		core_clk: core_clk {
++			#clock-cells = <0>;
++			compatible = "fixed-clock";
++			clock-frequency = <50000000>;
++		};
++
++		core_intc: interrupt-controller {
++			compatible = "snps,arc700-intc";
++			interrupt-controller;
++			#interrupt-cells = <1>;
++		};
++
++		uart0: serial@f0000000 {
++			compatible = "ns8250";
++			reg = <0xf0000000 0x2000>;
++			interrupts = <24>;
++			clock-frequency = <3686400>;
++			baud = <115200>;
++			reg-shift = <2>;
++			reg-io-width = <4>;
++			no-loopback-test = <1>;
++		};
++
++		arcpct0: pct {
++			compatible = "snps,arc700-pct";
++		};
++	};
++};

@@ -1,0 +1,33 @@
+# kernel-arc700.img -- Linux 4.19.56 for an ARC700 (ARCompact) core
+#
+# Runs on qemu-system-arc -M virt -cpu arc700 from the qemu fork
+# (lordrasmus/qemu, branch uclibc-ng); upstream qemu has no ARC, and
+# Synopsys' fork only decodes ARCv2/ARCv3.  The image is the plain vmlinux
+# (ELF).
+#
+#   qemu-system-arc -M virt -cpu arc700 -m 256M -nographic \
+#     -kernel kernel-arc700.img -initrd rootfs.img.xz
+#
+# -m 256M must match the kernel's memory: the device tree does not describe
+# memory, so the kernel assumes 256 MiB at 0x80000000.  With more, qemu puts
+# the initrd above what the kernel manages, and freeing it after unpacking
+# ends in "BUG: Bad page state".
+#
+# The machine passes the initrd as "initrd=<start>,<size>" on the command
+# line; the rest of the command line (earlycon, console=ttyS0) comes from the
+# built-in device tree.
+#
+# Build: kernel-arc700.config is an ARC770 config with the built-in device
+# tree qemu_arc700 and an empty INITRAMFS_SOURCE (the default initramfs brings
+# /dev/console).  kernel-arc700-qemu-dts.patch adds that device tree: the 8250
+# at 0xf0000000 on interrupt 24, as hw/arc/virt.c wires it, and a 50 MHz core
+# clock, the rate the fork's timers count at (as for haps_hs.dts on ARCv2).
+# A mismatch makes the guest clock run fast or slow by the same factor.
+#
+#   cd linux-4.19.56
+#   patch -p1 < kernel-arc700-qemu-dts.patch
+#   cp kernel-arc700.config .config
+#   make ARCH=arc CROSS_COMPILE=arc-openadk-linux-uclibc- \
+#        HOSTCFLAGS=-fcommon olddefconfig vmlinux
+#
+# The toolchain is the CI's arc700 toolchain (gcc 12.3.0).
