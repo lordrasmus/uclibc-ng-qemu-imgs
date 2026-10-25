@@ -1,0 +1,32 @@
+# kernel-nds32.img -- Linux 5.15.128 for the Andes AE3XX (nds32le, N13)
+#
+# Runs on qemu-system-nds32 -M ae3xx from the qemu fork (lordrasmus/qemu,
+# branch uclibc-ng); upstream qemu never had nds32.  The image is the
+# stripped vmlinux (ELF), which carries physical load addresses.
+#
+#   qemu-system-nds32 -M ae3xx -nographic -kernel kernel-nds32.img \
+#     -initrd rootfs.img.xz -append console=ttyS0
+#
+# The machine follows arch/nds32/boot/dts/ae3xx.dts and generates the
+# device tree itself (UART at 0xf0300000, ATCPIT100 timer at 0xf0400000,
+# 256 MiB from 0).  It also enters the initrd as /memreserve/, because
+# arch/nds32 never calls reserve_initrd_mem().  No kernel patches.
+#
+# 5.15 is the last line with nds32 (removed in v5.18).  The same image
+# serves the 5.10.217 and 5.15.128 targets.
+#
+# Build: kernel-nds32.config is the nds32 defconfig with DEVTMPFS(_MOUNT),
+# RD_XZ, PRINTK_TIME and CPU_N13, and without DEBUG_INFO, MODULES, FPU,
+# CACHE_L2 and the FTMAC100 Ethernet the machine does not model.
+#
+#   cd linux-5.15.128
+#   cp kernel-nds32.config .config
+#   make ARCH=nds32 CROSS_COMPILE=nds32le-openadk-linux-uclibc- \
+#        olddefconfig vmlinux
+#   nds32le-openadk-linux-uclibc-strip -o kernel-nds32.img vmlinux
+#
+# The toolchain is the CI's toolchain-nds32le-gcc-13.2.0-npt-shared.
+#
+# Known: each exiting process logs "BUG: non-zero pgtables_bytes on
+# freeing mm: 4096", a page table accounting mismatch not tracked down
+# yet (arch/nds32's own pgd_free is the suspect).  Harmless for the tests.
