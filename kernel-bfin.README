@@ -29,10 +29,16 @@
 #
 #   cd linux-4.9.156
 #   patch -p1 < kernel-bfin-initrd.patch
+#   patch -p1 < kernel-bfin-nommu-mmap-end.patch
 #   cp kernel-bfin.config .config
 #   make ARCH=blackfin CROSS_COMPILE=bfin-openadk-uclinux-uclibc- \
 #        HOSTCFLAGS=-fcommon olddefconfig vmlinux
 #   bfin-openadk-uclinux-uclibc-strip -o kernel-bfin.img vmlinux
+#
+# kernel-bfin-nommu-mmap-end.patch: a /dev/mem mapping of the last page below
+# 4 GiB got vm_end 0 and corrupted the noMMU region tree; the kernel hung a
+# few mmaps later.  The CI's mmap2 test no longer maps /dev/mem, OpenADK's
+# copy of the old upstream test does.
 #
 # HOSTCFLAGS=-fcommon because 4.9's dtc does not build with gcc >= 10 otherwise.
 # 4.9 is the newest usable kernel: arch/blackfin was removed in v4.17.

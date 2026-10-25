@@ -1,0 +1,23 @@
+# nommu: refuse a direct mapping whose end does not fit in an address.
+# Without an MMU a shared mapping of /dev/mem is placed at the physical
+# address itself.  do_mmap() takes the address from the driver's
+# get_unmapped_area() and sets vm_end = addr + len unchecked, so the last
+# page below 4 GiB gives vm_end 0: munmap() cannot find the mapping again
+# (EINVAL), the region stays in the region tree, and a few allocations
+# later the kernel hangs in kmem_cache_alloc() on a corrupted free list.
+# The old upstream uClibc-ng mmap2 test maps /dev/mem at 0xfffff000 and
+# hung the kernel this way; with the patch the mapping fails with EINVAL.
+# mainline still has the same code (mm/nommu.c, do_mmap).
+--- a/mm/nommu.c
++++ b/mm/nommu.c
+@@ -1347,6 +1347,10 @@
+ 					goto error_just_free;
+ 
+ 				capabilities &= ~NOMMU_MAP_DIRECT;
++			} else if (addr + len <= addr) {
++				/* vm_end is exclusive and must fit */
++				ret = -EINVAL;
++				goto error_just_free;
+ 			} else {
+ 				vma->vm_start = region->vm_start = addr;
+ 				vma->vm_end = region->vm_end = addr + len;
