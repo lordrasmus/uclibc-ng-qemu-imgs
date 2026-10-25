@@ -1,0 +1,68 @@
+# c6x: give sync_file_range a trampoline like fadvise64_64.
+# sys_sync_file_range(int, loff_t, loff_t, unsigned int) wants its offsets
+# in the register pairs B5:B4 and A7:A6 and the flags in B6, but the syscall
+# entry hands over only A4, B4, A6, B6, A8 and B8, and SAVE_ALL has put TSR
+# into B5 by then.  Every sync_file_range read garbage as its offset.  The
+# C library passes the halves in the order fadvise64_64 takes them, so a
+# copy of sys_fadvise64_64_c6x with a different target does it.
+# arch/c6x is gone since Linux 5.11, so this cannot go upstream.
+--- a/arch/c6x/include/asm/syscalls.h
++++ b/arch/c6x/include/asm/syscalls.h
+@@ -39,6 +39,9 @@
+ extern long sys_fallocate_c6x(int fd, int mode,
+ 			      u32 offset_lo, u32 offset_hi,
+ 			      u32 len_lo, u32 len_hi);
++extern long sys_sync_file_range_c6x(int fd, u32 offset_lo, u32 offset_hi,
++				    u32 nbytes_lo, u32 nbytes_hi,
++				    unsigned int flags);
+ extern int sys_cache_sync(unsigned long s, unsigned long e);
+ 
+ #include <asm-generic/syscalls.h>
+--- a/arch/c6x/kernel/sys_c6x.c
++++ b/arch/c6x/kernel/sys_c6x.c
+@@ -57,6 +57,7 @@
+ #define sys_fadvise64		sys_fadvise64_c6x
+ #define sys_fadvise64_64	sys_fadvise64_64_c6x
+ #define sys_fallocate		sys_fallocate_c6x
++#define sys_sync_file_range	sys_sync_file_range_c6x
+ 
+ /* Use sys_mmap_pgoff directly */
+ #define sys_mmap2 sys_mmap_pgoff
+--- a/arch/c6x/kernel/entry.S
++++ b/arch/c6x/kernel/entry.S
+@@ -706,6 +706,35 @@
+ 	MV	.L2	B8,B6
+ ENDPROC(sys_fadvise64_64_c6x)
+ 
++;; On Entry, as for fadvise64_64
++;;   A4 - fd
++;;   B4 - offset_lo (LE), offset_hi (BE)
++;;   A6 - offset_lo (BE), offset_hi (LE)
++;;   B6 - nbytes_lo (LE), nbytes_hi (BE)
++;;   A8 - nbytes_lo (BE), nbytes_hi (LE)
++;;   B8 - flags
++ENTRY(sys_sync_file_range_c6x)
++#ifdef CONFIG_C6X_BIG_KERNEL
++	MVKL	.S1	sys_sync_file_range,A0
++	MVKH	.S1	sys_sync_file_range,A0
++	BNOP	.S2X	A0,2
++#else
++	B	.S2	sys_sync_file_range
++	NOP	2
++#endif
++#ifdef CONFIG_CPU_BIG_ENDIAN
++	MV	.L2	B4,B5
++ ||	MV	.D2X	A6,B4
++	MV	.L1	A8,A6
++ ||	MV	.D1X	B6,A7
++#else
++	MV	.D2X	A6,B5
++	MV	.L1	A8,A7
++ ||	MV	.D1X	B6,A6
++#endif
++	MV	.L2	B8,B6
++ENDPROC(sys_sync_file_range_c6x)
++
+ ;; On Entry
+ ;;   A4 - fd
+ ;;   B4 - mode
