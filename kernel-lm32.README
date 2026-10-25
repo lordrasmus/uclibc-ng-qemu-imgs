@@ -1,0 +1,47 @@
+# kernel-lm32.img -- Linux 3.5 (Milkymist) for LatticeMico32 under qemu
+#
+# Runs on qemu-system-lm32 -M milkymist from the qemu fork (lordrasmus/qemu,
+# branch uclibc-ng); upstream qemu dropped lm32 in 6.1.  The image is the
+# kernel's simpleImage.milkymist_one (ELF, device tree built in).
+#
+#   qemu-system-lm32 -M milkymist -nographic -kernel kernel-lm32.img \
+#     -initrd rootfs.img.xz
+#
+# The machine has 128 MiB at 0x40000000, fixed by the board, so there is no
+# -m.  Without -append the built-in command line is used
+# (console=ttyS0,115200 ro rootfstype=tmpfs); -initrd is unpacked as the
+# initramfs.
+#
+# Source: https://github.com/m-labs/linux-milkymist.git at
+# 6a2f2e4198eaff63ee75f6085ce9f966c47b4441, the tree openadk uses for lm32.
+# The same tree, patched, is linux-lm32-3.5.tar.xz in lordrasmus/toolchains;
+# the CI installs the uClibc-ng headers from it.
+#
+# Patches, in this order:
+#   kernel-lm32-openadk-revert-new-uart-drivers.patch     from openadk
+#   kernel-lm32-openadk-flat-fix-debug-output.patch       from openadk
+#   kernel-lm32-openadk-irq-fix.patch                     from openadk
+#   kernel-lm32-openadk-lm32-signal-save-syscall-result-in-sigframe.patch
+#                                                         from openadk
+#   kernel-lm32-openadk-new-gcc.patch                     from openadk
+#   kernel-lm32-openadk-perl-fix.patch                    from openadk
+#   kernel-lm32-openadk-qemu-timer.patch                  from openadk
+#   kernel-lm32-max-zoneorder.patch    MAX_ORDER 14: without an MMU the xz
+#                                      decoder's 8 MiB dictionary needs one
+#                                      contiguous block, the default 11 stops
+#                                      at 4 MiB and the initramfs never unpacks
+#
+# Build:
+#
+#   cd linux-milkymist
+#   for p in <patches above>; do patch -p1 < $p; done
+#   cp kernel-lm32.config .config
+#   make ARCH=lm32 CROSS_COMPILE=lm32-openadk-uclinux-uclibc- \
+#        HOSTCFLAGS="-fcommon -std=gnu11" oldconfig simpleImage.milkymist_one
+#   cp arch/lm32/boot/simpleImage.milkymist_one kernel-lm32.img
+#
+# Toolchain: toolchain-lm32-gcc-4.5.4-no-static-nommu-flat.
+# HOSTCFLAGS: dtc needs -fcommon, and scripts/unifdef.c does not build as
+# C23, which gcc 15 picks by default.
+# The config is openadk's qemu-lm32 kernel without the built-in initramfs
+# and with RD_XZ.

@@ -1,0 +1,17 @@
+--- a/arch/lm32/Kconfig	2026-10-25 20:01:58.018309614 +0100
++++ b/arch/lm32/Kconfig	2026-10-25 20:01:58.141312687 +0100
+@@ -92,6 +92,14 @@
+ 
+ source "mm/Kconfig"
+ 
++config FORCE_MAX_ZONEORDER
++	int "Maximum zone order"
++	default "14"
++	help
++	  Without an MMU, vmalloc() needs physically contiguous pages, and
++	  the xz decoder for an initramfs allocates its dictionary that way:
++	  8 MiB for xz -6.  The default of 11 caps a block at 4 MiB.
++
+ menu "Executable file formats"
+ 
+ source "fs/Kconfig.binfmt"
