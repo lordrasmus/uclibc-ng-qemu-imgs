@@ -1,0 +1,40 @@
+# kernel-tile.img -- Linux 4.14.311 for TILE-Gx, one tile under qemu
+#
+# Runs on qemu-system-tilegx -M tilegx from the qemu fork (lordrasmus/qemu,
+# branch uclibc-ng); upstream qemu had TILE-Gx as linux-user only and dropped
+# it in 6.0.  The image is vmlinux (ELF, stripped).
+#
+#   qemu-system-tilegx -M tilegx -m 512M -nographic -kernel kernel-tile.img \
+#     -initrd rootfs.img.xz -append console=hvc0
+#
+# A TILE-Gx kernel is a client of the Tilera hypervisor and touches no device
+# of its own.  qemu serves the hypervisor calls itself: the console (hvc0),
+# memory, page tables, the RTC, -append as the command line, and -initrd as
+# the hvfs file "initramfs", which the kernel loads in load_hv_initrd().
+# The machine has one tile and its RAM from physical address 0; -m must be a
+# multiple of 16 MiB.
+#
+# Patches against linux-4.14.311:
+#   kernel-tile-loop-distribute.patch  memcpy recursed into itself with gcc 10
+#   kernel-readahead-tmpfs.patch       readahead(2) on tmpfs (shared with
+#                                      cris; applies with an offset)
+#
+# Build:
+#
+#   cd linux-4.14.311
+#   patch -p1 < kernel-tile-loop-distribute.patch
+#   patch -p1 < kernel-readahead-tmpfs.patch
+#   cp kernel-tile.config .config
+#   make ARCH=tile CROSS_COMPILE=tilegx-openadk-linux-uclibc- \
+#        HOSTCFLAGS="-fcommon -std=gnu11" olddefconfig vmlinux
+#   tilegx-openadk-linux-uclibc-strip -o kernel-tile.img vmlinux
+#
+# Toolchain: toolchain-tilegx-gcc-10.5.0-no-static.
+# HOSTCFLAGS: 4.14's dtc needs -fcommon, and scripts/unifdef.c does not build
+# as C23, which gcc 15 picks by default.
+# The config is tilegx_defconfig without PCI, USB, the GXIO devices and
+# modules, NR_CPUS=2, KERNEL_PL=2, 64 KiB pages.
+#
+# Result with the CI's static rootfs: 315 passed, 22 failed, 9 skipped; the
+# failures are the FP exception and rounding mode checks, which TILE-Gx cannot
+# meet (no FPU, no FP status register; gcc inlines fdouble_*/fsingle_*).

@@ -1,0 +1,17 @@
+# gcc >= 10 turns the n < 16 byte loop of arch/tile/lib/memcpy_64.c into
+# a call to memcpy, which is itself: endless recursion on the first short
+# copy, the stack runs down into the kernel text.  Later kernels build
+# such files with -fno-tree-loop-distribute-patterns; arch/tile was gone
+# before that.
+--- a/arch/tile/lib/Makefile	2023-03-22 13:26:16.000000000 +0100
++++ b/arch/tile/lib/Makefile	2026-10-25 17:46:54.714081039 +0100
+@@ -3,6 +3,9 @@
+ # Makefile for TILE-specific library files..
+ #
+ 
++# The byte loops in memcpy/memset must not become calls to themselves.
++ccflags-y += $(call cc-option,-fno-tree-loop-distribute-patterns)
++
+ lib-y = cacheflush.o checksum.o cpumask.o delay.o uaccess.o \
+ 	memmove.o memcpy_$(BITS).o memchr_$(BITS).o memset_$(BITS).o \
+ 	strchr_$(BITS).o strlen_$(BITS).o strnlen_$(BITS).o
