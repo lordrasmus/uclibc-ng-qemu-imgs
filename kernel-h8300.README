@@ -1,0 +1,50 @@
+# kernel-h8300.img -- Linux 4.4.302 for the EDOSK2674 (H8S/2674, run as H8/300H, noMMU)
+#
+# Runs on qemu-system-h8300 -M edosk2674 from the qemu fork (lordrasmus/qemu,
+# branch uclibc-ng).  The image is vmlinux as a raw binary (objcopy -O
+# binary); the machine loads it at the start of DRAM and the reset vector
+# points at it.  The command line is built into the device tree, so -append
+# has no effect.
+#
+#   qemu-system-h8300 -M edosk2674,ram-base=0x100000 -m 14M -nographic \
+#     -kernel kernel-h8300.img \
+#     -drive file=rootfs.ext2,format=raw,if=none,id=hd \
+#     -device virtio-blk-device,drive=hd
+#
+# Root file system on a virtio disk: the 24-bit address space ends at 16 MiB,
+# and the unpacked test rootfs (about 16 MB) does not fit next to the kernel
+# as an initramfs.  The fork adds a virtio-mmio transport at 0xf90000, and
+# ram-base=0x100000 moves the DRAM down from 0x400000 so it can grow to 14 MiB
+# below the Ethernet chip at 0xf80000.  The rootfs is an ext2 image
+# (mke2fs -t ext2 -b 1024 -d rootfs).
+#
+# Patches, each one fix, against linux-4.4.302:
+#   kernel-h8300-virtio-dts.patch      device tree for the virtio machine
+#   kernel-h8300-rambase.patch         CONFIG_RAMBASE instead of a fixed 0x400000
+#   kernel-h8300-syscall-irq.patch     system calls ran with interrupts masked
+#   kernel-h8300-signal-sp.patch       signal frames went to the wrong stack
+#   kernel-h8300-memset-return.patch   memset returned the end of the buffer
+#   kernel-h8300-fallocate-args.patch  fallocate read its offsets scrambled
+#   kernel-h8300-cc-clobber.patch      asm without "cc" breaks with gcc >= 12
+#   kernel-h8300-tpu.patch             TPU clocksource channels never started
+#   kernel-h8300-smc91x.patch          smc91x on h8300, without GPIOLIB
+#   kernel-h8300-sh-sci-overrun.patch  no overrun notices in the test output
+#
+# Build:
+#
+#   cd linux-4.4.302
+#   for p in virtio-dts rambase syscall-irq signal-sp memset-return \
+#            fallocate-args cc-clobber tpu smc91x sh-sci-overrun ; do
+#     patch -p1 < kernel-h8300-$p.patch
+#   done
+#   cp kernel-h8300.config .config
+#   make ARCH=h8300 CROSS_COMPILE=h8300-openadk-linux-uclibc- \
+#        HOSTCFLAGS=-fcommon olddefconfig vmlinux
+#   h8300-openadk-linux-uclibc-objcopy -O binary vmlinux kernel-h8300.img
+#
+# Toolchain: toolchain-h8300-h8300h-gcc-13.4.0-no-static-nommu-flat.
+# HOSTCFLAGS=-fcommon because 4.4's dtc does not build with gcc >= 10 otherwise.
+# 5.18, the last kernel with arch/h8300, does not boot with this gcc (page
+# allocator and slab corruption from the first allocations on); 4.4 does.
+#
+# Result with the CI's FLAT rootfs: 333 passed, 0 failed, 13 skipped.
