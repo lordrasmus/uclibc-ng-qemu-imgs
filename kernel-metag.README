@@ -1,0 +1,37 @@
+# kernel-metag.img -- Linux 4.4.302 for Imagination META (TZ1090 "Comet")
+#
+# Runs on qemu-system-meta -M comet (alias 01sp) from the qemu fork
+# (lordrasmus/qemu, branch uclibc-ng); upstream qemu never had META, the
+# port comes from Imagination's 1.3.1 branch.  The image is the stripped
+# vmlinux; qemu loads it like the Debug Adapter did and builds the boot MMU
+# tables itself.  Linux removed metag in 4.17, 4.4.302 is the last LTS.
+#
+#   qemu-system-meta -M 01sp -nographic -device da,exit_threads=1 \
+#     -kernel kernel-metag.img -initrd rootfs.img.xz
+#
+# The console is the Debug Adapter's channel 1 (ttyDA1); without a chardev
+# "chan1" qemu puts it on the first serial, which -nographic makes stdio.
+# The machine has 256 MiB.  The command line is built in
+# (console=ttyDA1,115200 ro rootfstype=tmpfs metag_da.console_poll=1), the
+# initramfs is not: -initrd reaches the kernel through a small device tree
+# qemu passes in D0Ar4, with the initrd range in /chosen.
+#
+# Source: linux-4.4.302.tar.xz from kernel.org.
+#
+# Patch:
+#   kernel-metag-dt-initrd.patch   the kernel reads the initrd range from the
+#                                  device tree before it knows meta_memoffset,
+#                                  so the bounds stayed physical, and nothing
+#                                  reserved the initrd memory; without it an
+#                                  initrd from the device tree is not usable
+#
+# Build, with openadk's metag toolchain (gcc 4.2.4):
+#
+#   cd linux-4.4.302
+#   patch -p1 < kernel-metag-dt-initrd.patch
+#   cp kernel-metag.config .config
+#   make ARCH=metag CROSS_COMPILE=metag-openadk-linux-uclibc- oldconfig vmlinux
+#   metag-openadk-linux-uclibc-strip -o kernel-metag.img vmlinux
+#
+# The config is openadk's for qemu-metag with the piggyback initramfs taken
+# out (INITRAMFS_SOURCE=""), RD_XZ=y for the xz rootfs and CMDLINE_FORCE off.

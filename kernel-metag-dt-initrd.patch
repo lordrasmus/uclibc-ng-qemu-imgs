@@ -1,0 +1,35 @@
+--- a/arch/metag/kernel/setup.c	2026-10-25 20:33:55.101905382 +0000
++++ b/arch/metag/kernel/setup.c	2026-10-25 20:33:55.108905762 +0000
+@@ -323,6 +323,17 @@
+ 	 */
+ 	meta_memoffset = text_start - (start_pte & PAGE_MASK);
+ 
++#ifdef CONFIG_BLK_DEV_INITRD
++	/*
++	 * The device tree was scanned before meta_memoffset was known, so the
++	 * __va() there left the initrd bounds physical.
++	 */
++	if (initrd_start) {
++		initrd_start += meta_memoffset;
++		initrd_end += meta_memoffset;
++	}
++#endif
++
+ 	/* Now lets look at the heap space */
+ 	heap_id = (__TBIThreadId() & TBID_THREAD_BITS)
+ 		+ TBID_SEG(0, TBID_SEGSCOPE_LOCAL, TBID_SEGTYPE_HEAP);
+--- a/arch/metag/mm/init.c	2026-10-25 20:33:55.102905436 +0000
++++ b/arch/metag/mm/init.c	2026-10-25 20:33:55.108905762 +0000
+@@ -243,6 +243,12 @@
+ 	 */
+ 	memblock_reserve(base, (PFN_PHYS(start_pfn) + PAGE_SIZE - 1) - base);
+ 
++#ifdef CONFIG_BLK_DEV_INITRD
++	/* and an initrd the bootloader put in RAM */
++	if (initrd_start)
++		memblock_reserve(__pa(initrd_start), initrd_end - initrd_start);
++#endif
++
+ #ifdef CONFIG_HIGHMEM
+ 	/*
+ 	 * Add & reserve highmem, so page structures are initialised.
