@@ -1,0 +1,26 @@
+# kernel-sh4.img -- Linux 6.5.10 for the R2D board (SH7751R), qemu-system-sh4 -M r2d
+#
+# The image is arch/sh/boot/zImage, built from kernel-sh4.config.
+#
+# Two ways to hand it the root file system:
+#
+#   initramfs, for the targets without threads:
+#     qemu-system-sh4 -M r2d -m 1024M -kernel kernel-sh4.img \
+#       -initrd rootfs.img.xz -nographic -serial vc
+#
+#   ext2 on the board's CompactFlash (IDE) slot, for sh4-npt, whose rootfs
+#   (about 80 MB unpacked with the NPTL tests) does not fit into the
+#   machine's RAM as an initramfs:
+#     qemu-system-sh4 -M r2d -m 1024M -kernel kernel-sh4.img \
+#       -drive if=ide,format=raw,file=rootfs.ext2 -append root=/dev/sda \
+#       -nographic -serial vc
+#
+# The built-in command line is "console=ttySC1,115200 noiotrap rw" with
+# CONFIG_CMDLINE_EXTEND, so qemu's -append comes in front of it.  Before,
+# CONFIG_CMDLINE_OVERWRITE threw -append away and root= could not be given.
+# "rw" is built in because the CI hands the qemu command through the
+# environment and loses quotes, so -append can only take one word; with an
+# initramfs it changes nothing.
+#
+# The console is the second SCIF (ttySC1): the CI appends a second -serial
+# for it, uc_devel turns "-serial vc" into "-serial null -serial mon:stdio".
