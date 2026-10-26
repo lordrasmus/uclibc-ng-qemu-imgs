@@ -1,0 +1,51 @@
+# kernel-frv.img -- Linux 4.9.337 for the MB93091 VDK (Fujitsu FR-V FR401, noMMU)
+#
+# Runs on qemu-system-frv -M mb93091 from the qemu fork (lordrasmus/qemu,
+# branch uclibc-ng); upstream qemu never had FR-V.  The image is the
+# stripped vmlinux (ELF).
+#
+#   qemu-system-frv -M mb93091 -nographic -kernel kernel-frv.img \
+#     -initrd rootfs.img.xz -append console=ttyS0
+#
+# The machine is the mb93090-mb00 motherboard without PCI, with an FR401
+# (MB93401A) CPU board: the FR400 core uClinux runs on, which the
+# uClibc-ng toolchain's -mcpu=fr400 code needs.  RAM is 256 MiB at
+# 0xc0000000.  Linux registers both on-chip UARTs as line 0, so the second
+# one (0xfeff9c40) becomes ttyS0; qemu connects serial0 there.  qemu puts
+# the command line at the top of RAM and the initrd below it, and appends
+# initrd=<start>,<size> to the command line.
+#
+# 4.9 is the last line with frv (removed in v4.17; 4.9 is the last
+# longterm kernel that has it).
+#
+# Patches, each one fix, against linux-4.9.337:
+#   kernel-frv-initrd.patch        take the initrd from initrd=<start>,<size>;
+#                                  BLK_DEV_INITRD was off for frv
+#   kernel-frv-clock-cmodes.patch  section type conflict with gcc 15
+#   kernel-frv-dma-nopci.patch     the DMA operations were only built with PCI
+#   kernel-frv-sdata-aw.patch      .sdata of switch_to.S had no flags and was
+#                                  not loaded: stack pointer 0 after head.S
+#   kernel-frv-uart-mapbase.patch  without a mapbase the 8250 driver never
+#                                  configured the UARTs: no output from
+#                                  user space
+#   kernel-readahead-tmpfs.patch   readahead(2) on tmpfs (shared with tile
+#                                  and cris)
+#
+# Build: kernel-frv.config is allnoconfig with FR401, MB93091_VDK,
+# MB93090_MB00 without PCI, UCPAGE_OFFSET_C0000000, GPREL_DATA_NONE,
+# BINFMT_ELF_FDPIC, SERIAL_8250(_CONSOLE) with 2 UARTs, BLK_DEV_INITRD with
+# RD_XZ, DEVTMPFS(_MOUNT), TMPFS, SYSVIPC, POSIX_MQUEUE, the event fds,
+# inotify, NET, INET, UNIX, PACKET, PRINTK_TIME and
+# SECTION_MISMATCH_WARN_ONLY.
+#
+#   cd linux-4.9.337
+#   for p in kernel-frv-initrd.patch kernel-frv-clock-cmodes.patch \
+#            kernel-frv-dma-nopci.patch kernel-frv-sdata-aw.patch \
+#            kernel-frv-uart-mapbase.patch kernel-readahead-tmpfs.patch
+#   do patch -p1 < $p; done
+#   cp kernel-frv.config .config
+#   make ARCH=frv CROSS_COMPILE=frv-openadk-linux-uclibc- \
+#        HOSTCFLAGS=-fcommon olddefconfig vmlinux
+#   frv-openadk-linux-uclibc-strip -o kernel-frv.img vmlinux
+#
+# The toolchain is the CI's toolchain-frv-gcc-15.3.0-no-shared-nommu-fdpic.
