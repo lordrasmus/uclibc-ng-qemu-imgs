@@ -1,0 +1,44 @@
+# kernel-ia64.img -- Linux 6.6.23 for the ia64 "virt" machine (Itanium 2, UP)
+#
+# Runs on qemu-system-ia64 -M virt from the qemu fork (lordrasmus/qemu,
+# branch uclibc-ng); upstream qemu never had system emulation for ia64.
+# The image is the stripped vmlinux (ELF), loaded at its physical
+# addresses.
+#
+#   qemu-system-ia64 -M virt -nographic -m 1G -kernel kernel-ia64.img \
+#     -initrd rootfs.img.xz -append console=ttyS0
+#
+# There is no firmware image: the machine answers the EFI, SAL and PAL
+# calls itself and builds the ACPI tables (MADT with one LSAPIC and the
+# I/O SAPIC, a DSDT announcing COM1 as PNP0501), so the kernel finds its
+# console through PNPACPI and SERIAL_8250_PNP.
+#
+# 6.6 is the last line with ia64 (removed in v6.7).
+#
+# Patches, each one fix, against linux-6.6.23:
+#   kernel-ia64-up-set_pte.patch  the !SMP branches of
+#                                 ptep_test_and_clear_young and
+#                                 ptep_set_wrprotect call set_pte_at
+#                                 before it is defined; gcc >= 14 makes
+#                                 that an error (and the link fails)
+#
+# Build: kernel-ia64.config is tiger_defconfig without SMP and modules,
+# MCKINLEY, 16 KB pages, FLATMEM, PNPACPI, SERIAL_8250_PNP, DEVTMPFS
+# (_MOUNT), RD_XZ, PRINTK_TIME, no SCSI/ATA/USB/network drivers.
+#
+#   cd linux-6.6.23
+#   patch -p1 < kernel-ia64-up-set_pte.patch
+#   cp kernel-ia64.config .config
+#   make ARCH=ia64 CROSS_COMPILE=ia64-openadk-linux-uclibc- olddefconfig
+#   make ARCH=ia64 CROSS_COMPILE=ia64-openadk-linux-uclibc- \
+#     KCFLAGS="-Wno-error=implicit-function-declaration \
+#              -Wno-error=incompatible-pointer-types -Wno-error=int-conversion" \
+#     vmlinux
+#   ia64-openadk-linux-uclibc-strip -o kernel-ia64.img vmlinux
+#
+# The KCFLAGS are for gcc 15, which turned these warnings into errors
+# after ia64 was gone.  The toolchain is the CI's
+# toolchain-ia64-gcc-15.3.0-lt-static.
+#
+# Known: an SMP kernel needs qemu with 7716ae961f or later (TCs dropped
+# on firmware calls); this UP image does not.
