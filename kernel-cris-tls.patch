@@ -1,0 +1,62 @@
+# cris v10: thread-local storage for user space (Linux 4.9.156).
+# CRIS v10 has no register for the thread pointer, so the toolchain with
+# TLS reserves r6 for it (gcc keeps it out of register allocation).  The
+# kernel only has to set it: copy_thread() takes it from CLONE_SETTLS
+# (the fifth clone argument, in mof), set_thread_area/get_thread_area
+# (243/244, sys_ni_syscall before) write and read the saved r6, which the
+# syscall return reloads, and exec clears it.  Nothing changes on a
+# switch: r6 is saved and restored with the other registers.
+--- a/arch/cris/arch-v10/kernel/entry.S
++++ b/arch/cris/arch-v10/kernel/entry.S
+@@ -847,8 +847,8 @@
+ 	.long sys_futex		/* 240 */
+ 	.long sys_sched_setaffinity
+ 	.long sys_sched_getaffinity
+-	.long sys_ni_syscall	/* sys_set_thread_area */
+-	.long sys_ni_syscall	/* sys_get_thread_area */
++	.long sys_set_thread_area
++	.long sys_get_thread_area
+ 	.long sys_io_setup	/* 245 */
+ 	.long sys_io_destroy
+ 	.long sys_io_getevents
+--- a/arch/cris/arch-v10/kernel/process.c
++++ b/arch/cris/arch-v10/kernel/process.c
+@@ -110,6 +110,11 @@
+ 
+         childregs->r10 = 0;  /* child returns 0 after a fork/clone */
+ 
++	/* CRIS v10 has no register for TLS, so r6 is reserved as the thread
++	   pointer.  The new one is the fifth argument of clone, in mof.  */
++	if (clone_flags & CLONE_SETTLS)
++		childregs->r6 = childregs->mof;
++
+ 	/* put the switch stack right below the pt_regs */
+ 
+ 	swstack->r9 = 0; /* parameter to ret_from_sys_call, 0 == dont restart the syscall */
+@@ -182,3 +187,16 @@
+ 	       regs->r12, regs->r13, regs->orig_r10);
+ }
+ 
++
++/* The thread pointer is r6, which gcc keeps out of register allocation;
++   the syscall return restores it from pt_regs.  */
++asmlinkage int sys_set_thread_area(unsigned long tls)
++{
++	current_pt_regs()->r6 = tls;
++	return 0;
++}
++
++asmlinkage unsigned long sys_get_thread_area(void)
++{
++	return current_pt_regs()->r6;
++}
+--- a/arch/cris/include/arch-v10/arch/processor.h
++++ b/arch/cris/include/arch-v10/arch/processor.h
+@@ -54,6 +54,7 @@
+ 
+ #define start_thread(regs, ip, usp) do { \
+ 	regs->irp = ip;       \
++	regs->r6 = 0;         /* no thread pointer yet */ \
+ 	regs->dccr |= 1 << U_DCCR_BITNR; \
+ 	wrusp(usp);           \
+ } while(0)

@@ -8,6 +8,14 @@
 #   qemu-system-cris -M etrax100lx -nographic -kernel kernel-cris.img \
 #     -initrd rootfs.img.xz -append console=ttyS0
 #
+# or from an ext2 disk on the machine's virtio-mmio slot, for a root file
+# system larger than the RAM:
+#
+#   qemu-system-cris -M etrax100lx -nographic -kernel kernel-cris.img \
+#     -drive if=none,id=hd,format=raw,file=rootfs.ext2 \
+#     -device virtio-blk-device,drive=hd \
+#     -append "console=ttyS0 root=/dev/vda rootfstype=ext2 rw virtio_mmio.device=0x200@0x3c000000:13"
+#
 # -append is needed: the machine announces the initrd on the command line, so
 # the line is never empty and the built-in CONFIG_ETRAX_CMDLINE is not used.
 # The machine has 64 MiB, matching CONFIG_ETRAX_DRAM_SIZE.
@@ -17,12 +25,14 @@
 #
 # Build: kernel-cris.config is etrax-100lx_v2_defconfig with serial port 0 as
 # console and debug port, DEVTMPFS, SYSVIPC, POSIX_MQUEUE, BLK_DEV_INITRD with
-# an empty INITRAMFS_SOURCE (the default initramfs brings /dev/console), and
+# an empty INITRAMFS_SOURCE (the default initramfs brings /dev/console),
+# VIRTIO_MMIO with command line devices, VIRTIO_BLK and EXT2_FS, and
 # without the Ethernet, flash and MTD drivers the machine does not model.
 #
 #   cd linux-4.9.156
 #   for p in kernel-cris.patch kernel-readahead-tmpfs.patch \
-#            kernel-cris-initrd.patch; do patch -p1 < $p; done
+#            kernel-cris-initrd.patch kernel-cris-tls.patch \
+#            kernel-cris-dma-noop.patch; do patch -p1 < $p; done
 #   cp kernel-cris.config .config
 #   make ARCH=cris CROSS_COMPILE=cris-openadk-linux-uclibc- \
 #        HOSTCFLAGS=-fcommon olddefconfig vmlinux
@@ -30,7 +40,7 @@
 # HOSTCFLAGS=-fcommon because 4.9's dtc does not build with gcc >= 10 otherwise.
 # The toolchain is the CI's toolchain-cris-crisv10-gcc-10.5.0-lt-shared.
 #
-# The three patches:
+# The patches:
 #
 #   kernel-cris.patch             the delay slot after "ba ret_from_sys_call"
 #                                 in ret_from_kernel_thread (missing since
@@ -38,3 +48,6 @@
 #   kernel-readahead-tmpfs.patch  readahead(2) on tmpfs as since v4.19
 #   kernel-cris-initrd.patch      "initrd=<start>,<size>" on the command line,
 #                                 the only way 4.9 on cris can take an initrd
+#   kernel-cris-tls.patch         r6 as the thread pointer: CLONE_SETTLS,
+#                                 set_thread_area, cleared on exec
+#   kernel-cris-dma-noop.patch    DMA mapping without PCI, for virtio-mmio
