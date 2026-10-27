@@ -32,7 +32,8 @@
 #   cd linux-4.9.156
 #   for p in kernel-cris.patch kernel-readahead-tmpfs.patch \
 #            kernel-cris-initrd.patch kernel-cris-tls.patch \
-#            kernel-cris-dma-noop.patch; do patch -p1 < $p; done
+#            kernel-cris-dma-noop.patch kernel-cris-sched-clock.patch; do
+#     patch -p1 < $p; done
 #   cp kernel-cris.config .config
 #   make ARCH=cris CROSS_COMPILE=cris-openadk-linux-uclibc- \
 #        HOSTCFLAGS=-fcommon olddefconfig vmlinux
@@ -51,3 +52,7 @@
 #   kernel-cris-tls.patch         r6 as the thread pointer: CLONE_SETTLS,
 #                                 set_thread_area, cleared on exec
 #   kernel-cris-dma-noop.patch    DMA mapping without PCI, for virtio-mmio
+#   kernel-cris-sched-clock.patch sched_clock() from jiffies - INITIAL_JIFFIES;
+#                                 with raw jiffies it jumps back when they
+#                                 wrap 5 minutes after boot, the scheduler
+#                                 clock stops and woken threads never run

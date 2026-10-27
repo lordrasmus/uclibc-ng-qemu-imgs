@@ -1,0 +1,13 @@
+--- a/arch/cris/kernel/time.c
++++ b/arch/cris/kernel/time.c
+@@ -57,8 +57,8 @@
+ #ifndef CONFIG_GENERIC_SCHED_CLOCK
+ unsigned long long sched_clock(void)
+ {
+-	return (unsigned long long)jiffies * (NSEC_PER_SEC / HZ) +
+-		get_ns_in_jiffie();
++	return (unsigned long long)(jiffies - INITIAL_JIFFIES) *
++		(NSEC_PER_SEC / HZ) + get_ns_in_jiffie();
+ }
+ #endif
+ 
