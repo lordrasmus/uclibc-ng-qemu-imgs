@@ -5,7 +5,14 @@
 # stripped vmlinux (ELF).
 #
 #   qemu-system-frv -M mb93091 -nographic -kernel kernel-frv.img \
-#     -initrd rootfs.img.xz -append console=ttyS0
+#     -drive if=none,id=hd,format=raw,file=rootfs.ext2 \
+#     -device virtio-blk-device,drive=hd \
+#     -append "console=ttyS0 root=/dev/vda rootfstype=ext2 rw \
+#              virtio_mmio.device=0x200@0xfc000000:5"
+#
+# The disk sits on the virtio-mmio slot the qemu fork adds to the board
+# (0xfc000000, external interrupt XIRQ4 = IRQ 5); the real board has none.
+# -initrd rootfs.img.xz still works for a rootfs that fits in RAM.
 #
 # The machine is the mb93090-mb00 motherboard without PCI, with an FR401
 # (MB93401A) CPU board: the FR400 core uClinux runs on, which the
@@ -35,8 +42,9 @@
 # MB93090_MB00 without PCI, UCPAGE_OFFSET_C0000000, GPREL_DATA_NONE,
 # BINFMT_ELF_FDPIC, SERIAL_8250(_CONSOLE) with 2 UARTs, BLK_DEV_INITRD with
 # RD_XZ, DEVTMPFS(_MOUNT), TMPFS, SYSVIPC, POSIX_MQUEUE, the event fds,
-# inotify, NET, INET, UNIX, PACKET, PRINTK_TIME and
-# SECTION_MISMATCH_WARN_ONLY.
+# inotify, NET, INET, UNIX, PACKET, PRINTK_TIME,
+# SECTION_MISMATCH_WARN_ONLY, and VIRTIO_MMIO(_CMDLINE_DEVICES), VIRTIO_BLK
+# and EXT2_FS for the root disk.
 #
 #   cd linux-4.9.337
 #   for p in kernel-frv-initrd.patch kernel-frv-clock-cmodes.patch \
