@@ -16,3 +16,13 @@
 #   make
 #   strip qemu-system-m68k
 #   xz -9 qemu-system-m68k
+#
+# qemu-system-frv.xz   f137a3955b on branch frv, cherry-picked to uclibc-ng as
+#                      b111fe1771 (virtio-mmio disk on mb93091), built on the
+#                      runner container:
+#
+#   ../configure --target-list=frv-softmmu --static --disable-gio \
+#     --python=/opt/python3.12/bin/python3.12
+#   make
+#   strip qemu-system-frv
+#   xz -9 qemu-system-frv
