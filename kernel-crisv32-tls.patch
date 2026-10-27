@@ -1,0 +1,117 @@
+# cris v32: thread-local storage for user space (Linux 4.9.156).
+# CRIS v32 keeps the thread pointer in the upper 24 bits of $pid, next to
+# the 8-bit MMU context; copy_thread() already takes it from CLONE_SETTLS.
+# What was missing:
+#  - switch_mm() wrote $pid only when the mm changed, so threads of one
+#    process ran with the thread pointer of whichever thread came first.
+#    The scheduler calls switch_mm() for every switch to a user task, so
+#    write it there unconditionally.
+#  - set_thread_area/get_thread_area (243/244) were sys_ni_syscall; the
+#    main thread had no way to set its thread pointer.
+#  - exec kept the old thread pointer; flush_thread() now clears it.
+--- a/arch/cris/arch-v32/mm/tlb.c
++++ b/arch/cris/arch-v32/mm/tlb.c
+@@ -194,14 +194,17 @@
+ 		 * at points where * there's still a need to derefer the pgd.
+ 		 */
+ 		per_cpu(current_pgd, cpu) = next->pgd;
++	}
+ 
+-		/* Switch context in the MMU. */
+-		if (tsk && task_thread_info(tsk)) {
+-			SPEC_REG_WR(SPEC_REG_PID, next->context.page_id |
+-				task_thread_info(tsk)->tls);
+-		} else {
+-			SPEC_REG_WR(SPEC_REG_PID, next->context.page_id);
+-		}
++	/*
++	 * Switch context in the MMU.  $pid also holds the thread pointer in
++	 * its upper 24 bits, which differs between threads of one mm.
++	 */
++	if (tsk && task_thread_info(tsk)) {
++		SPEC_REG_WR(SPEC_REG_PID, next->context.page_id |
++			task_thread_info(tsk)->tls);
++	} else {
++		SPEC_REG_WR(SPEC_REG_PID, next->context.page_id);
+ 	}
+ }
+ 
+--- a/arch/cris/arch-v32/kernel/entry.S
++++ b/arch/cris/arch-v32/kernel/entry.S
+@@ -777,8 +777,8 @@
+ 	.long sys_futex		/* 240 */
+ 	.long sys_sched_setaffinity
+ 	.long sys_sched_getaffinity
+-	.long sys_ni_syscall	/* sys_set_thread_area */
+-	.long sys_ni_syscall	/* sys_get_thread_area */
++	.long sys_set_thread_area
++	.long sys_get_thread_area
+ 	.long sys_io_setup	/* 245 */
+ 	.long sys_io_destroy
+ 	.long sys_io_getevents
+--- a/arch/cris/arch-v32/kernel/process.c
++++ b/arch/cris/arch-v32/kernel/process.c
+@@ -13,6 +13,7 @@
+ #include <linux/err.h>
+ #include <linux/fs.h>
+ #include <hwregs/reg_rdwr.h>
++#include <hwregs/supp_reg.h>
+ #include <hwregs/reg_map.h>
+ #include <hwregs/timer_defs.h>
+ #include <hwregs/intr_vect_defs.h>
+@@ -182,3 +183,31 @@
+ 	printk("r12: %08lx r13: %08lx oR10: %08lx\n",
+ 		regs->r12, regs->r13, regs->orig_r10);
+ }
++
++/*
++ * The thread pointer lives in the upper 24 bits of $pid, above the 8-bit
++ * MMU context, so it must be 256-byte aligned.
++ */
++void set_thread_tls(unsigned long tls)
++{
++	unsigned long pid;
++
++	preempt_disable();
++	task_thread_info(current)->tls = tls;
++	SPEC_REG_RD(SPEC_REG_PID, pid);
++	SPEC_REG_WR(SPEC_REG_PID, (pid & 0xff) | tls);
++	preempt_enable();
++}
++
++asmlinkage int sys_set_thread_area(unsigned long tls)
++{
++	if (tls & 0xff)
++		return -EINVAL;
++	set_thread_tls(tls);
++	return 0;
++}
++
++asmlinkage unsigned long sys_get_thread_area(void)
++{
++	return task_thread_info(current)->tls;
++}
+--- a/arch/cris/include/arch-v32/arch/processor.h
++++ b/arch/cris/include/arch-v32/arch/processor.h
+@@ -47,6 +47,8 @@
+ 	wrusp(usp); \
+ } while(0)
+ 
++void set_thread_tls(unsigned long tls);
++
+ /* Nothing special to do for v32 when handling a kernel bus fault fixup. */
+ #define arch_fixup(regs) {};
+ 
+--- a/arch/cris/kernel/process.c
++++ b/arch/cris/kernel/process.c
+@@ -70,6 +70,10 @@
+ 
+ void flush_thread(void)
+ {
++#ifdef CONFIG_ETRAX_ARCH_V32
++	/* A new program starts without a thread pointer.  */
++	set_thread_tls(0);
++#endif
+ }
+ 
+ /* Fill in the fpu structure for a core dump. */

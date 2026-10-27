@@ -1,0 +1,20 @@
+# cris: DMA mapping without PCI (Linux 4.9.156).
+# Without CONFIG_PCI, get_dma_ops() was BUG(), so virtio-mmio crashed in
+# its probe (dma_set_mask).  Without an IOMMU, bus addresses are physical
+# addresses: use dma_noop_ops.
+--- a/arch/cris/include/asm/dma-mapping.h
++++ b/arch/cris/include/asm/dma-mapping.h
+@@ -9,10 +9,11 @@
+ 	return &v32_dma_ops;
+ }
+ #else
++/* Without PCI there is no IOMMU: bus addresses are physical addresses,
++   which is what platform devices such as virtio-mmio need.  */
+ static inline struct dma_map_ops *get_dma_ops(struct device *dev)
+ {
+-	BUG();
+-	return NULL;
++	return &dma_noop_ops;
+ }
+ #endif
+ 

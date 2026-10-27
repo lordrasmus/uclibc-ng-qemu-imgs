@@ -1,0 +1,35 @@
+# kernel-crisv32.img -- Linux 4.9.156 for the AXIS devboard 88 (CRISv32)
+#
+# Runs on qemu-system-cris -M axis-dev88 from the qemu fork (lordrasmus/qemu,
+# branch uclibc-ng, see qemu-bin/); upstream qemu dropped the board in 9.2.
+# The image is the stripped vmlinux (ELF).  The root disk is ext2 on a
+# virtio-mmio slot of the board:
+#
+#   qemu-system-cris -M axis-dev88 -m 128M -nographic -kernel kernel-crisv32.img \
+#     -drive if=none,id=hd,format=raw,file=rootfs.ext2 \
+#     -device virtio-blk-device,drive=hd \
+#     -append "console=ttyS0 root=/dev/vda rootfstype=ext2 rw virtio_mmio.device=0x200@0x3c000000:65"
+#
+# -initrd works as well (announced as "initrd=<start>,<size>", which needs
+# kernel-cris-initrd.patch).  -m 128M matches CONFIG_ETRAX_DRAM_SIZE.
+#
+# Build: kernel-crisv32.config is dev88_defconfig with 128 MiB DRAM, without
+# the flash and MTD drivers the machine does not model, and with SYSVIPC,
+# POSIX_MQUEUE, DEVTMPFS_MOUNT, RD_XZ, VIRTIO_MMIO with command line devices,
+# VIRTIO_BLK and EXT2_FS.
+#
+#   cd linux-4.9.156
+#   for p in kernel-readahead-tmpfs.patch kernel-cris-initrd.patch \
+#            kernel-crisv32-tls.patch kernel-cris-dma-noop.patch; do
+#     patch -p1 < $p
+#   done
+#   cp kernel-crisv32.config .config
+#   make ARCH=cris CROSS_COMPILE=crisv32-openadk-linux-uclibc- \
+#        HOSTCFLAGS=-fcommon olddefconfig vmlinux
+#   crisv32-openadk-linux-uclibc-strip -o kernel-crisv32.img vmlinux
+#
+# The toolchain is the CI's toolchain-crisv32-gcc-10.5.0-npt-static.
+#
+#   kernel-crisv32-tls.patch       the thread pointer in $pid for every
+#                                  thread, set_thread_area, reset on exec
+#   kernel-cris-dma-noop.patch  DMA mapping without PCI, for virtio-mmio
