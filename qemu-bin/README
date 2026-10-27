@@ -1,0 +1,18 @@
+# qemu-bin/ -- single qemu binaries, ahead of qemu-inst.tar.xz
+#
+# The qemu job of the CI (z_qemu_test_run.yml) takes qemu-bin/<binary>.xz, if
+# there is one for the first word of the target's qemu command, over the
+# binary from qemu-inst.tar.xz.  That lets one machine change without
+# rebuilding and re-uploading every qemu.
+#
+# The binaries are statically linked, so they run on any x86_64 Linux host,
+# and are built from the qemu fork (lordrasmus/qemu, branch uclibc-ng).
+#
+# qemu-system-m68k.xz  b3c06ca3a4 (virtio-mmio disk on mcf5208evb), built on
+#                      the runner container:
+#
+#   ../configure --target-list=m68k-softmmu --static --disable-gio \
+#     --python=/opt/python3.12/bin/python3.12
+#   make
+#   strip qemu-system-m68k
+#   xz -9 qemu-system-m68k

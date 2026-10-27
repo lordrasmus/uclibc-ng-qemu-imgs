@@ -1,0 +1,30 @@
+# kernel-m68k-cf5208.img -- Linux 6.18.37 for the ColdFire MCF5208EVB (noMMU)
+#
+# Boots from an ext2 disk on a virtio-mmio device.  The real board has no disk
+# and qemu's mcf5208evb has no -initrd, so the device was added to the qemu
+# fork (lordrasmus/qemu, branch uclibc-ng, b3c06ca3a4): legacy virtio-mmio at
+# 0xfc0f0000 on interrupt controller source 30 (vector 94).  Upstream qemu and
+# the qemu in qemu-inst.tar.xz before that commit cannot run this image; take
+# qemu-bin/qemu-system-m68k.xz.
+#
+#   qemu-system-m68k -nographic -M mcf5208evb -cpu m5208 -m 512 \
+#     -kernel kernel-m68k-cf5208.img \
+#     -drive if=none,id=hd,format=raw,file=rootfs.ext2 \
+#     -device virtio-blk-device,drive=hd \
+#     -append "console=ttyS0 root=/dev/vda rootfstype=ext2 rw virtio_mmio.device=0x200@0xfc0f0000:94"
+#
+# rootfstype=ext2 is needed: the built-in command line says rootfstype=tmpfs.
+# The image is the plain vmlinux; it runs ELF (FDPIC) and FLAT programs.
+#
+# CONFIG_CLOCK_FREQ is 166666666, the core clock of the board and of qemu's
+# mcf5208evb.  The config this replaced had the Kconfig default 66666666; the
+# kernel then took the PIT to run at 33 MHz while qemu counts at 83 MHz, and
+# the guest clock ran 2.5 times fast -- sleep (5) took 2 s, and tests with a
+# timeout (tst-mutex7, tst-rwlock11) failed.
+#
+# Build, from kernel-m68k-cf5208.config:
+#
+#   cd linux-6.18.37
+#   cp kernel-m68k-cf5208.config .config
+#   make ARCH=m68k CROSS_COMPILE=m68k-openadk-linux-uclibc- olddefconfig vmlinux
+#   cp vmlinux kernel-m68k-cf5208.img
