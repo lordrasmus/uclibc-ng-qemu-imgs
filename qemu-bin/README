@@ -27,10 +27,11 @@
 #   strip qemu-system-frv
 #   xz -9 qemu-system-frv
 #
-# qemu-system-cris.xz  a09622d1be (axis-dev88 back for CRISv32, with -initrd
+# qemu-system-cris.xz  e13560648b (axis-dev88 back for CRISv32, with -initrd
 #                      and a virtio-mmio disk; a virtio-mmio disk on
-#                      etrax100lx too; bwf on CRISv10 fixed), built on the
-#                      runner container:
+#                      etrax100lx too; bwf on CRISv10 fixed; a CRISv10 delay
+#                      slot whose fetch faults restarts at its branch),
+#                      built on the runner container:
 #
 #   ../configure --target-list=cris-softmmu --static --disable-gio \
 #     --python=/opt/python3.12/bin/python3.12
