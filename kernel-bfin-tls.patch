@@ -1,0 +1,58 @@
+--- a/arch/blackfin/Kconfig
++++ b/arch/blackfin/Kconfig
+@@ -13,6 +13,7 @@
+ config BLACKFIN
+ 	def_bool y
+ 	select HAVE_ARCH_KGDB
++	select HAVE_COPY_THREAD_TLS
+ 	select HAVE_ARCH_TRACEHOOK
+ 	select HAVE_DYNAMIC_FTRACE
+ 	select HAVE_FTRACE_MCOUNT_RECORD
+--- a/arch/blackfin/kernel/process.c
++++ b/arch/blackfin/kernel/process.c
+@@ -81,6 +81,7 @@
+ void start_thread(struct pt_regs *regs, unsigned long new_ip, unsigned long new_sp)
+ {
+ 	regs->pc = new_ip;
++	regs->b3 = 0;		/* the thread pointer */
+ 	if (current->mm)
+ 		regs->p5 = current->mm->start_data;
+ #ifndef CONFIG_SMP
+@@ -98,7 +99,9 @@
+ {
+ }
+ 
+-asmlinkage int bfin_clone(unsigned long clone_flags, unsigned long newsp)
++asmlinkage int bfin_clone(unsigned long clone_flags, unsigned long newsp,
++			  int __user *parent_tidptr, int __user *child_tidptr,
++			  unsigned long tls)
+ {
+ #ifdef __ARCH_SYNC_CORE_DCACHE
+ 	if (current->nr_cpus_allowed == num_possible_cpus())
+@@ -106,13 +109,13 @@
+ #endif
+ 	if (newsp)
+ 		newsp -= 12;
+-	return do_fork(clone_flags, newsp, 0, NULL, NULL);
++	return _do_fork(clone_flags, newsp, 0, parent_tidptr, child_tidptr, tls);
+ }
+ 
+ int
+-copy_thread(unsigned long clone_flags,
+-	    unsigned long usp, unsigned long topstk,
+-	    struct task_struct *p)
++copy_thread_tls(unsigned long clone_flags,
++		unsigned long usp, unsigned long topstk,
++		struct task_struct *p, unsigned long tls)
+ {
+ 	struct pt_regs *childregs;
+ 	unsigned long *v;
+@@ -132,6 +135,8 @@
+ 		childregs->r0 = 0;
+ 		p->thread.usp = usp ? : rdusp();
+ 		v[0] = v[1] = 0;
++		if (clone_flags & CLONE_SETTLS)
++			childregs->b3 = tls;
+ 	}
+ 
+ 	p->thread.ksp = (unsigned long)v;

@@ -26,10 +26,12 @@
 #   - CMDLINE_BOOL off: a built-in command line would replace the one in R0
 #   - BFIN_EXTMEM_ICACHEABLE off: with it, anomaly 05000263 caps the usable
 #     memory at 60 MB; the machine models no caches anyway
+#   - FUTEX, for NPTL
 #
 #   cd linux-4.9.156
 #   patch -p1 < kernel-bfin-initrd.patch
 #   patch -p1 < kernel-bfin-nommu-mmap-end.patch
+#   patch -p1 < kernel-bfin-tls.patch
 #   cp kernel-bfin.config .config
 #   make ARCH=blackfin CROSS_COMPILE=bfin-openadk-uclinux-uclibc- \
 #        HOSTCFLAGS=-fcommon olddefconfig vmlinux
@@ -39,6 +41,13 @@
 # 4 GiB got vm_end 0 and corrupted the noMMU region tree; the kernel hung a
 # few mmaps later.  The CI's mmap2 test no longer maps /dev/mem, OpenADK's
 # copy of the old upstream test does.
+#
+# kernel-bfin-tls.patch: Blackfin's clone took only the flags and the new
+# stack pointer, so NPTL could pass neither the TLS pointer nor the thread ID
+# addresses.  clone now takes (flags, newsp, ptid, ctid, tls) through
+# _do_fork, copy_thread_tls loads the TLS pointer into B3, the thread pointer
+# of the bfin TLS ABI, and start_thread clears B3 for a new program.  The
+# NPTL target runs with -m 512M: its FLAT rootfs is about twice as large.
 #
 # HOSTCFLAGS=-fcommon because 4.9's dtc does not build with gcc >= 10 otherwise.
 # 4.9 is the newest usable kernel: arch/blackfin was removed in v4.17.
