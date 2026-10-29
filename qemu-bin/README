@@ -38,3 +38,15 @@
 #   make
 #   strip qemu-system-cris
 #   xz -9 qemu-system-cris
+#
+# qemu-system-bfin.xz  72f4f2468f (RAISE sets ILAT under the BQL; the core
+#                      timer interrupt could be lost against it and the
+#                      guest idled for good), built here with the options
+#                      of the qemu-inst.tar.xz binary:
+#
+#   ../configure --target-list=bfin-softmmu --static \
+#     --without-default-features --disable-pixman --disable-docs \
+#     --disable-werror
+#   make
+#   strip qemu-system-bfin
+#   xz -9 qemu-system-bfin
