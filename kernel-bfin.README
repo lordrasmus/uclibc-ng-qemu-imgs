@@ -32,10 +32,14 @@
 #   patch -p1 < kernel-bfin-initrd.patch
 #   patch -p1 < kernel-bfin-nommu-mmap-end.patch
 #   patch -p1 < kernel-bfin-tls.patch
+#   patch -p1 < kernel-bfin-nommu-proc-maps.patch
 #   cp kernel-bfin.config .config
 #   make ARCH=blackfin CROSS_COMPILE=bfin-openadk-uclinux-uclibc- \
 #        HOSTCFLAGS=-fcommon olddefconfig vmlinux
 #   bfin-openadk-uclinux-uclibc-strip -o kernel-bfin.img vmlinux
+#
+# Build with a toolchain without TLS (the bfin LT one): an assembler that
+# keeps B3 for the thread pointer rejects the kernel's writes to B3.
 #
 # kernel-bfin-nommu-mmap-end.patch: a /dev/mem mapping of the last page below
 # 4 GiB got vm_end 0 and corrupted the noMMU region tree; the kernel hung a
@@ -48,6 +52,12 @@
 # _do_fork, copy_thread_tls loads the TLS pointer into B3, the thread pointer
 # of the bfin TLS ABI, and start_thread clears B3 for a new program.  The
 # NPTL target runs with -m 512M: its FLAT rootfs is about twice as large.
+#
+# kernel-bfin-nommu-proc-maps.patch: reading /proc/self/maps to the end left
+# mmap_sem held.  m_next returns NULL past the last VMA with the lock taken,
+# and m_stop released it only for a non-NULL entry, so the process's next
+# mmap hung for good.  NPTL's pthread_getattr_np reads that file and
+# pthread_create then maps the thread stack (tst-attr3).
 #
 # HOSTCFLAGS=-fcommon because 4.9's dtc does not build with gcc >= 10 otherwise.
 # 4.9 is the newest usable kernel: arch/blackfin was removed in v4.17.

@@ -1,0 +1,51 @@
+--- a/fs/proc/task_nommu.c
++++ b/fs/proc/task_nommu.c
+@@ -219,8 +219,11 @@
+ 		return ERR_PTR(-ESRCH);
+ 
+ 	mm = priv->mm;
+-	if (!mm || !atomic_inc_not_zero(&mm->mm_users))
++	if (!mm || !atomic_inc_not_zero(&mm->mm_users)) {
++		put_task_struct(priv->task);
++		priv->task = NULL;
+ 		return NULL;
++	}
+ 
+ 	down_read(&mm->mmap_sem);
+ 	/* start from the Nth VMA */
+@@ -228,8 +231,7 @@
+ 		if (n-- == 0)
+ 			return p;
+ 
+-	up_read(&mm->mmap_sem);
+-	mmput(mm);
++	/* m_stop drops the lock */
+ 	return NULL;
+ }
+ 
+@@ -237,14 +239,17 @@
+ {
+ 	struct proc_maps_private *priv = m->private;
+ 
+-	if (!IS_ERR_OR_NULL(_vml)) {
+-		up_read(&priv->mm->mmap_sem);
+-		mmput(priv->mm);
+-	}
+-	if (priv->task) {
+-		put_task_struct(priv->task);
+-		priv->task = NULL;
+-	}
++	/*
++	 * m_next returns NULL past the last VMA with the lock still held,
++	 * so whether m_start pinned the task decides, not _vml.
++	 */
++	if (!priv->task)
++		return;
++
++	up_read(&priv->mm->mmap_sem);
++	mmput(priv->mm);
++	put_task_struct(priv->task);
++	priv->task = NULL;
+ }
+ 
+ static void *m_next(struct seq_file *m, void *_p, loff_t *pos)
