@@ -2,11 +2,14 @@
 #
 # Runs on qemu-system-m68k -M m68328 from the qemu fork (lordrasmus/qemu,
 # branch uclibc-ng): a 68000 with the MC68328's interrupt controller and
-# timer, a 16550 at 0xffffe000 on IRQ 2 and 128 MiB of RAM.  Upstream qemu
-# has no 68000 machine.  The image is the plain vmlinux (ELF).
+# timer, a 16550 at 0xffffe000 on IRQ 2 and, with -m 512M, 512 MiB of RAM.
+# Upstream qemu has no 68000 machine.  The image is the plain vmlinux (ELF).
 #
-#   qemu-system-m68k -M m68328 -nographic -kernel kernel-m68k-68000.img \
+#   qemu-system-m68k -M m68328 -m 512M -nographic -kernel kernel-m68k-68000.img \
 #     -initrd rootfs.img -append console=ttyS0,115200
+#
+# CONFIG_RAMSIZE is 512 MiB, which the NPTL rootfs needs, so the machine
+# must get -m 512M.
 #
 # The rootfs goes in uncompressed: without an MMU the kernel cannot get a
 # large enough contiguous buffer for the xz dictionary.
