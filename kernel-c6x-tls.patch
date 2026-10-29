@@ -1,0 +1,70 @@
+--- a/arch/c6x/include/asm/processor.h
++++ b/arch/c6x/include/asm/processor.h
+@@ -48,6 +48,7 @@
+ 	unsigned long  usp;		/* user stack pointer */
+ 	unsigned long  pc;		/* kernel pc */
+ 	unsigned long  wchan;
++	unsigned long  tp;		/* user thread pointer (GPLYB) */
+ };
+ 
+ #define INIT_THREAD					\
+--- a/arch/c6x/kernel/asm-offsets.c
++++ b/arch/c6x/kernel/asm-offsets.c
+@@ -95,6 +95,7 @@
+ 	OFFSET(THREAD_B11_10,	thread_struct, b11_10);
+ 	OFFSET(THREAD_A11_10,	thread_struct, a11_10);
+ 	OFFSET(THREAD_RICL_ICL,	thread_struct, ricl_icl);
++	OFFSET(THREAD_TP,	thread_struct, tp);
+ 	BLANK();
+ 
+ 	OFFSET(TASK_STATE,	task_struct, state);
+--- a/arch/c6x/kernel/process.c
++++ b/arch/c6x/kernel/process.c
+@@ -99,6 +99,7 @@
+ 	regs->sp  = usp;
+ 	regs->tsr |= 0x40; /* set user mode */
+ 	current->thread.usp = usp;
++	asm volatile ("mvc .s2 %0,GPLYB" : : "b"(0));
+ }
+ 
+ /*
+@@ -131,6 +132,10 @@
+ 	p->thread.usp = childregs->sp;
+ 	thread_saved_ksp(p) = (unsigned long)childregs - 8;
+ 	p->thread.wchan	= p->thread.pc;
++	if (clone_flags & CLONE_SETTLS)
++		p->thread.tp = tls;
++	else
++		asm volatile ("mvc .s2 GPLYB,%0" : "=b"(p->thread.tp));
+ #ifdef __DSBT__
+ 	{
+ 		unsigned long dp;
+--- a/arch/c6x/kernel/switch_to.S
++++ b/arch/c6x/kernel/switch_to.S
+@@ -15,6 +15,13 @@
+ 	 *		    struct task_struct *tsk) ;
+ 	 */
+ ENTRY(__switch_to)
++	;; The user thread pointer lives in GPLYB, which the kernel never uses.
++	MVC	.S2	GPLYB,B0
++	LDW	.D2T2	*+B4(THREAD_TP),B1
++	STW	.D1T2	B0,*+A4(THREAD_TP)
++	NOP	3
++	MVC	.S2	B1,GPLYB
++
+ 	LDDW	.D2T2	*+B4(THREAD_B15_14),B7:B6
+  ||	MV	.L2X	A4,B5	; prev
+  ||	MV	.L1X	B4,A5	; next
+--- a/arch/c6x/Makefile
++++ b/arch/c6x/Makefile
+@@ -19,6 +19,10 @@
+ KBUILD_CFLAGS   += $(cflags-y)
+ KBUILD_AFLAGS   += $(cflags-y)
+ 
++# The kernel switches GPLYB, the user thread pointer, itself.
++KBUILD_CFLAGS   += $(call as-option,-Wa$(comma)-mno-tp-gplyb)
++KBUILD_AFLAGS   += $(call as-option,-Wa$(comma)-mno-tp-gplyb)
++
+ ifdef CONFIG_CPU_BIG_ENDIAN
+ KBUILD_CFLAGS   += -mbig-endian
+ KBUILD_AFLAGS   += -mbig-endian

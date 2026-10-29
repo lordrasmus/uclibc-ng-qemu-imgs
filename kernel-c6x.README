@@ -4,7 +4,7 @@
 # branch uclibc-ng); upstream qemu never had the C6000.  The image is the
 # stripped vmlinux (ELF).
 #
-#   qemu-system-c6x -M dsk6455 -nographic -kernel kernel-c6x.img \
+#   qemu-system-c6x -M dsk6455 -m 256M -nographic -kernel kernel-c6x.img \
 #     -initrd rootfs.img.xz -append 'console=ttyS0 lpj=500000'
 #
 # The machine follows arch/c6x/boot/dts/dsk6455.dts and generates the
@@ -20,14 +20,26 @@
 #   kernel-c6x-sync-file-range.patch  sync_file_range read its offsets from
 #                                     registers the syscall entry does not
 #                                     pass on
+#   kernel-c6x-tls.patch              GPLYB, the thread pointer of the C6000
+#                                     EABI, follows the task across context
+#                                     switches and clone sets it with
+#                                     CLONE_SETTLS (kernel built with gas'
+#                                     -mno-tp-gplyb, see the binutils patch)
+#   kernel-c6x-user-gie.patch         start_thread left GIE off for init,
+#                                     whose registers come from a kernel
+#                                     thread, and every program inherited
+#                                     it, so user code was never preempted
 #
 # Build: kernel-c6x.config is dsk6455_defconfig with SERIAL_8250(_CONSOLE),
 # SERIAL_OF_PLATFORM, SERIAL_EARLYCON, NR_UARTS 1, MFD_SYSCON,
 # POWER_RESET_SYSCON_POWEROFF, DEVTMPFS(_MOUNT), BINFMT_FLAT, PRINTK_TIME,
-# NET, INET, UNIX, PACKET and POSIX_MQUEUE.
+# NET, INET, UNIX, PACKET, POSIX_MQUEUE and FUTEX.
+#
+# -m 256M: the default 128 MB is too little for the NPTL test rootfs.
 #
 #   cd linux-5.10.272
-#   patch -p1 < kernel-c6x-sync-file-range.patch
+#   for p in kernel-c6x-sync-file-range.patch kernel-c6x-tls.patch \
+#            kernel-c6x-user-gie.patch; do patch -p1 < $p; done
 #   cp kernel-c6x.config .config
 #   make ARCH=c6x CROSS_COMPILE=tic6x-openadk-uclinux- olddefconfig vmlinux
 #   tic6x-openadk-uclinux-strip -o kernel-c6x.img vmlinux

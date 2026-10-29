@@ -1,0 +1,12 @@
+--- a/arch/c6x/kernel/process.c
++++ b/arch/c6x/kernel/process.c
+@@ -97,7 +97,8 @@
+ 
+ 	regs->pc  = pc;
+ 	regs->sp  = usp;
+-	regs->tsr |= 0x40; /* set user mode */
++	/* user mode, interrupts enabled; a kernel thread's regs start at 0 */
++	regs->tsr |= 0x41;
+ 	current->thread.usp = usp;
+ 	asm volatile ("mvc .s2 %0,GPLYB" : : "b"(0));
+ }
