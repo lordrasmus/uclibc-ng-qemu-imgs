@@ -50,3 +50,14 @@
 #   make
 #   strip qemu-system-bfin
 #   xz -9 qemu-system-bfin
+#
+# qemu-system-ia64.xz  385552f795 (Itanium 2 virt machine; NaT collection,
+#                      rfi frame registers and misaligned accesses fixed
+#                      since the qemu-inst.tar.xz binary db34467775),
+#                      built here:
+#
+#   ../configure --target-list=ia64-softmmu --static \
+#     --without-default-features --enable-tcg --disable-pixman --disable-docs
+#   make
+#   strip qemu-system-ia64
+#   xz -9 qemu-system-ia64
