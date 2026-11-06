@@ -61,3 +61,14 @@
 #   make
 #   strip qemu-system-ia64
 #   xz -9 qemu-system-ia64
+#
+# qemu-system-cskyv2.xz  3089edc2ef (bkpt raises the breakpoint exception
+#                      for the guest instead of ending the emulator with
+#                      exit(0): __builtin_trap took the whole test run down),
+#                      built here:
+#
+#   ../configure --target-list=cskyv2-softmmu --static \
+#     --without-default-features --enable-tcg --disable-pixman --disable-docs
+#   make
+#   strip qemu-system-cskyv2
+#   xz -9 qemu-system-cskyv2
