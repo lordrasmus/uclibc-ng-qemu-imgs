@@ -1,0 +1,14 @@
+# frv: pass the ucontext to an SA_SIGINFO handler.
+# setup_rt_frame() set gr8 (signal) and gr9 (siginfo) but never gr10, the
+# third argument: since the port came in (2005) a handler read its ucontext
+# from whatever gr10 held when the signal arrived.
+--- a/arch/frv/kernel/signal.c
++++ b/arch/frv/kernel/signal.c
+@@ -312,6 +312,7 @@ static int setup_rt_frame(struct ksignal *ksig, sigset_t *set)
+ 	__frame->lr  = (unsigned long) &frame->retcode;
+ 	__frame->gr8 = sig;
+ 	__frame->gr9 = (unsigned long) &frame->info;
++	__frame->gr10 = (unsigned long) &frame->uc;
+ 
+ #if DEBUG_SIG
+ 	printk("SIG deliver %d (%s:%d): sp=%p pc=%lx ra=%p\n",

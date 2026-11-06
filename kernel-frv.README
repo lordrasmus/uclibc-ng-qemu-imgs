@@ -37,6 +37,8 @@
 #                                  user space
 #   kernel-readahead-tmpfs.patch   readahead(2) on tmpfs (shared with tile
 #                                  and cris)
+#   kernel-frv-sigframe-ucontext.patch  pass the ucontext to an SA_SIGINFO
+#                                  handler in gr10; it never was
 #
 # Build: kernel-frv.config is allnoconfig with FR401, MB93091_VDK,
 # MB93090_MB00 without PCI, UCPAGE_OFFSET_C0000000, GPREL_DATA_NONE,
@@ -49,7 +51,8 @@
 #   cd linux-4.9.337
 #   for p in kernel-frv-initrd.patch kernel-frv-clock-cmodes.patch \
 #            kernel-frv-dma-nopci.patch kernel-frv-sdata-aw.patch \
-#            kernel-frv-uart-mapbase.patch kernel-readahead-tmpfs.patch
+#            kernel-frv-uart-mapbase.patch kernel-readahead-tmpfs.patch \
+#            kernel-frv-sigframe-ucontext.patch
 #   do patch -p1 < $p; done
 #   cp kernel-frv.config .config
 #   make ARCH=frv CROSS_COMPILE=frv-openadk-linux-uclibc- \
