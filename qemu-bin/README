@@ -72,3 +72,12 @@
 #   make
 #   strip qemu-system-cskyv2
 #   xz -9 qemu-system-cskyv2
+#
+# qemu-system-avr32.xz  1773f4fd63 (atngw100 with a virtio-mmio slot for a
+#                      root disk; COMPARE lowered under the BQL), built here:
+#
+#   ../configure --target-list=avr32-softmmu --static \
+#     --without-default-features --enable-tcg --disable-pixman --disable-docs
+#   make
+#   strip qemu-system-avr32
+#   xz -9 qemu-system-avr32
