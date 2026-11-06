@@ -20,7 +20,8 @@
 #
 #   cd linux-4.9.156
 #   for p in kernel-readahead-tmpfs.patch kernel-cris-initrd.patch \
-#            kernel-crisv32-tls.patch kernel-cris-dma-noop.patch; do
+#            kernel-crisv32-tls.patch kernel-cris-dma-noop.patch \
+#            kernel-cris-sigframe-ucontext.patch; do
 #     patch -p1 < $p
 #   done
 #   cp kernel-crisv32.config .config
@@ -33,3 +34,5 @@
 #   kernel-crisv32-tls.patch       the thread pointer in $pid for every
 #                                  thread, set_thread_area, reset on exec
 #   kernel-cris-dma-noop.patch  DMA mapping without PCI, for virtio-mmio
+#   kernel-cris-sigframe-ucontext.patch  r12 = the ucontext for an SA_SIGINFO
+#                               handler; it was 0 since 2003

@@ -1,0 +1,29 @@
+# cris: pass the ucontext to an SA_SIGINFO handler.
+# setup_rt_frame() set r12, the third argument of an SA_SIGINFO handler, to
+# 0 on v10 and v32 alike (since 2003): a handler had no way to its ucontext.
+diff -Nru a/arch/cris/arch-v10/kernel/signal.c b/arch/cris/arch-v10/kernel/signal.c
+--- a/arch/cris/arch-v10/kernel/signal.c
++++ b/arch/cris/arch-v10/kernel/signal.c
+@@ -331,8 +331,8 @@
+ 	regs->r10 = ksig->sig;
+ 	/* Second argument is (siginfo_t *) */
+ 	regs->r11 = (unsigned long)&frame->info;
+-	/* Third argument is unused */
+-	regs->r12 = 0;
++	/* Third argument is (ucontext_t *) */
++	regs->r12 = (unsigned long) &frame->uc;
+ 
+ 	/* Actually move the usp to reflect the stacked frame */
+ 	wrusp((unsigned long)frame);
+diff -Nru a/arch/cris/arch-v32/kernel/signal.c b/arch/cris/arch-v32/kernel/signal.c
+--- a/arch/cris/arch-v32/kernel/signal.c
++++ b/arch/cris/arch-v32/kernel/signal.c
+@@ -346,7 +346,7 @@
+ 	regs->srp = return_ip;
+ 	regs->r10 = ksig->sig;
+ 	regs->r11 = (unsigned long) &frame->info;
+-	regs->r12 = 0;
++	regs->r12 = (unsigned long) &frame->uc;
+ 
+ 	/* Actually move the usp to reflect the stacked frame. */
+ 	wrusp((unsigned long)frame);

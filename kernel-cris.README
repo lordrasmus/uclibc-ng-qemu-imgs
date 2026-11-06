@@ -32,7 +32,8 @@
 #   cd linux-4.9.156
 #   for p in kernel-cris.patch kernel-readahead-tmpfs.patch \
 #            kernel-cris-initrd.patch kernel-cris-tls.patch \
-#            kernel-cris-dma-noop.patch kernel-cris-sched-clock.patch; do
+#            kernel-cris-dma-noop.patch kernel-cris-sched-clock.patch \
+#            kernel-cris-sigframe-ucontext.patch; do
 #     patch -p1 < $p; done
 #   cp kernel-cris.config .config
 #   make ARCH=cris CROSS_COMPILE=cris-openadk-linux-uclibc- \
@@ -56,3 +57,5 @@
 #                                 with raw jiffies it jumps back when they
 #                                 wrap 5 minutes after boot, the scheduler
 #                                 clock stops and woken threads never run
+#   kernel-cris-sigframe-ucontext.patch  r12 = the ucontext for an SA_SIGINFO
+#                                 handler; it was 0 since 2003
