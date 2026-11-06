@@ -1,0 +1,79 @@
+avr32: strncpy_from_user: copy up to the end of user space
+
+strncpy_from_user() refused with -EFAULT whenever src + count reached
+past TASK_SIZE, without looking at the string.  getname() asks for
+EMBEDDED_NAME_MAX and then PATH_MAX bytes, so a pathname in the top
+4 KB of the address space -- at the top of the stack, which the
+randomization puts there now and then -- could not be opened:
+open(argv[0]) of a program started with an empty environment and
+ADDR_NO_RANDOMIZE fails with EFAULT every time.  In the test suite it
+showed as a random test failing with "can't load library 'libc.so.0'":
+ld.so's library path sat on the stack, and open() returned EFAULT.
+
+Do what strnlen_user() next to it does: copy up to the end of user
+space, and fail only if the NUL is not found there.
+
+--- a/arch/avr32/lib/strncpy_from_user.S
++++ b/arch/avr32/lib/strncpy_from_user.S
+@@ -11,6 +11,7 @@
+ 
+ #include <asm/page.h>
+ #include <asm/thread_info.h>
++#include <asm/processor.h>
+ #include <asm/asm.h>
+ 
+ 	/*
+@@ -30,7 +31,36 @@
+ strncpy_from_user:
+ 	mov	r9, -EFAULT
+ 	branch_if_kernel r8, __strncpy_from_user
+-	ret_if_privileged r8, r11, r10, r9
++	sub	r8, r10, 1
++	add	r8, r11
++	retcs	r9
++	brmi	adjust_count
++	rjmp	__strncpy_from_user
++
++	/*
++	 * src + count reaches past the end of user space.  The string
++	 * may still end below it -- getname() asks for PATH_MAX bytes of
++	 * a pathname at the top of the stack -- so copy up to the end of
++	 * user space, and fail only if the NUL is not there.
++	 */
++adjust_count:
++	cp.w	r11, 0		/* src must be < TASK_SIZE */
++	retlt	r9
++	cp.w	r10, 0
++	reteq	0
++	lddpc	r10, _task_size
++	sub	r10, r11
++	mov	r9, r10
++
++4:	ld.ub	r8, r11++
++	st.b	r12++, r8
++	cp.w	r8, 0
++	breq	2f
++	sub	r9, 1
++	brne	4b
++
++	mov	r12, -EFAULT
++	retal	r12
+ 
+ 	.global	__strncpy_from_user
+ 	.type	__strncpy_from_user, "function"
+@@ -50,6 +80,10 @@
+ 2:	sub	r10, r9
+ 	retal	r10
+ 
++	.align	2
++_task_size:
++	.long	TASK_SIZE
++
+ 	.section .fixup, "ax"
+ 	.align	1
+ 3:	mov	r12, -EFAULT
+@@ -58,3 +92,4 @@
+ 	.section __ex_table, "a"
+ 	.align	2
+ 	.long	1b, 3b
++	.long	4b, 3b

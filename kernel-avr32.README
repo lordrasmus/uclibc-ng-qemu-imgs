@@ -11,9 +11,13 @@
 #
 # The root file system is an ext2 disk on the machine's virtio-mmio slot
 # (0xfc000000, interrupt group 32; not on the real board).  As an initramfs
-# it took half of the 64 MiB, and late in the suite ld.so failed to map
-# libc ("can't load library 'libc.so.0'").  -initrd rootfs.img.xz still
-# works for a small rootfs.
+# it took half of the 64 MiB.  -initrd rootfs.img.xz still works for a
+# small rootfs.
+#
+# "can't load library 'libc.so.0'" on a random test was not memory: open()
+# returned EFAULT for a pathname in the top 4 KB of user space, where the
+# stack randomization sometimes puts ld.so's library path.
+# kernel-avr32-strncpy-from-user.patch fixes it.
 #
 # 4.4 is the newest usable kernel: arch/avr32 was removed in v4.12, and the
 # CI's uClibc-ng headers are 4.4.302.
@@ -28,7 +32,8 @@
 #
 #   cd linux-4.4.302
 #   for p in kernel-avr32-uaccess-align.patch kernel-avr32-fallocate.patch \
-#            kernel-readahead-tmpfs-4.4.patch
+#            kernel-readahead-tmpfs-4.4.patch \
+#            kernel-avr32-strncpy-from-user.patch
 #   do patch -p1 < $p; done
 #   cp kernel-avr32.config .config
 #   make ARCH=avr32 CROSS_COMPILE=avr32-openadk-linux-uclibc- \
