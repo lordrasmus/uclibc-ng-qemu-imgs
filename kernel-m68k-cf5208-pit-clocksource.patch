@@ -1,0 +1,107 @@
+m68k: coldfire: pit: keep the clocksource monotonic
+
+The PIT is both the tick and the clocksource.  The clocksource reads
+pit_cnt, the whole periods counted by pit_tick, plus the part of the
+current period, PIT_CYCLES_PER_JIFFY - PCNTR.  When the counter has
+reloaded but pit_tick has not run yet -- interrupts are off, or the
+interrupt is just pending -- PCNTR already belongs to the next period
+while pit_cnt does not, and the read steps back by one jiffy.
+
+timekeeping does not catch that step for this clocksource: at 1.3 MHz
+a 32-bit counter never overflows the multiplication, so max_cycles is
+the whole mask, and timekeeping_cycles_to_ns() only looks for negative
+motion above max_cycles.  The step is taken as 2^32 cycles forward, and
+CLOCK_MONOTONIC jumps ahead by 3298 s, which expires every pending
+timer.  A test suite under qemu's mcf5208evb saw alarm(600) fire after
+135 ms; a loop reading CLOCK_MONOTONIC saw the jump in five runs out of
+five with HZ_PERIODIC.
+
+Count the pending period: if PIF is set, add a jiffy and read PCNTR
+again in case the reload came between the two reads.
+
+Also drop oneshot.  The clocksource assumes that every period is
+PIT_CYCLES_PER_JIFFY long, which oneshot mode breaks: set_next_event
+loads an arbitrary delta (OVW restarts the counter at once), the
+counter runs free from 0xffff after it, and pit_tick still adds one
+jiffy per interrupt.  Tickless idle needs a clocksource that does not
+depend on how the event timer is programmed, which this one is not.
+
+With both changes the CLOCK_MONOTONIC loop saw no jump in five runs,
+and the uClibc-ng test suite passes 819 of 819 on mcf5208evb.
+
+--- a/arch/m68k/coldfire/pit.c	2026-11-07 15:38:32.309456539 +0100
++++ b/arch/m68k/coldfire/pit.c	2026-11-07 15:38:32.448460037 +0100
+@@ -53,14 +53,6 @@
+ 	return 0;
+ }
+ 
+-static int cf_pit_set_oneshot(struct clock_event_device *evt)
+-{
+-	__raw_writew(MCFPIT_PCSR_DISABLE, TA(MCFPIT_PCSR));
+-	__raw_writew(MCFPIT_PCSR_EN | MCFPIT_PCSR_PIE |
+-		     MCFPIT_PCSR_OVW | MCFPIT_PCSR_CLK64, TA(MCFPIT_PCSR));
+-	return 0;
+-}
+-
+ static int cf_pit_shutdown(struct clock_event_device *evt)
+ {
+ 	__raw_writew(MCFPIT_PCSR_DISABLE, TA(MCFPIT_PCSR));
+@@ -68,25 +60,26 @@
+ }
+ 
+ /*
+- * Program the next event in oneshot mode
+- *
+- * Delta is given in PIT ticks
++ * Periodic only.  The same PIT is also the clocksource below, and that
++ * one counts time as pit_cnt (whole periods, added in pit_tick) plus the
++ * part of the current period, PIT_CYCLES_PER_JIFFY - PCNTR.  Both assume
++ * that every period is exactly PIT_CYCLES_PER_JIFFY long.  In oneshot
++ * mode it is not: set_next_event loads an arbitrary delta (OVW restarts
++ * the counter at once), the counter runs free from 0xffff after it, and
++ * pit_tick still adds one jiffy per interrupt.  The clocksource then
++ * reads too little while idle and steps back when the counter is
++ * reloaded.  A step back is not caught for this clocksource: at 1.3 MHz
++ * its max_cycles is the whole 32-bit mask, so timekeeping takes the
++ * negative delta for 2^32 cycles and CLOCK_MONOTONIC jumps ahead by
++ * about 3300 s, which expires every pending timer at once.  Oneshot
++ * (and with it tickless idle) needs a clocksource that does not depend
++ * on how the event timer is programmed.
+  */
+-static int cf_pit_next_event(unsigned long delta,
+-		struct clock_event_device *evt)
+-{
+-	__raw_writew(delta, TA(MCFPIT_PMR));
+-	return 0;
+-}
+-
+ struct clock_event_device cf_pit_clockevent = {
+ 	.name			= "pit",
+-	.features		= CLOCK_EVT_FEAT_PERIODIC |
+-				  CLOCK_EVT_FEAT_ONESHOT,
++	.features		= CLOCK_EVT_FEAT_PERIODIC,
+ 	.set_state_shutdown	= cf_pit_shutdown,
+ 	.set_state_periodic	= cf_pit_set_periodic,
+-	.set_state_oneshot	= cf_pit_set_oneshot,
+-	.set_next_event		= cf_pit_next_event,
+ 	.shift			= 32,
+ 	.irq			= MCF_IRQ_PIT1,
+ };
+@@ -120,6 +113,17 @@
+ 	local_irq_save(flags);
+ 	pcntr = __raw_readw(TA(MCFPIT_PCNTR));
+ 	cycles = pit_cnt;
++	/*
++	 * The counter may have reloaded before pit_tick ran to count the
++	 * period, here with interrupts off or just before.  PCNTR then
++	 * belongs to the next period while pit_cnt does not, and the sum
++	 * would step back by a jiffy.  Count the pending period, and read
++	 * PCNTR again in case the reload came after the first read.
++	 */
++	if (__raw_readw(TA(MCFPIT_PCSR)) & MCFPIT_PCSR_PIF) {
++		pcntr = __raw_readw(TA(MCFPIT_PCNTR));
++		cycles += PIT_CYCLES_PER_JIFFY;
++	}
+ 	local_irq_restore(flags);
+ 
+ 	return cycles + PIT_CYCLES_PER_JIFFY - pcntr;

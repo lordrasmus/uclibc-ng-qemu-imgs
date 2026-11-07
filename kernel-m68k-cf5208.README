@@ -22,9 +22,18 @@
 # the guest clock ran 2.5 times fast -- sleep (5) took 2 s, and tests with a
 # timeout (tst-mutex7, tst-rwlock11) failed.
 #
+# kernel-m68k-cf5208-pit-clocksource.patch keeps CLOCK_MONOTONIC monotonic.
+# Without it the PIT clocksource steps back by a jiffy when it is read
+# between the counter reload and the tick interrupt, timekeeping takes that
+# for 2^32 cycles forward, and the clock jumps ahead by 3298 s: alarm(600)
+# fired after 135 ms and tests "timed out" at random (tst-mutex7a,
+# tst-barrier3, tst-cond17).  It also keeps the PIT periodic, since the
+# clocksource assumes a fixed period that oneshot mode does not keep.
+#
 # Build, from kernel-m68k-cf5208.config:
 #
 #   cd linux-6.18.37
+#   patch -p1 < kernel-m68k-cf5208-pit-clocksource.patch
 #   cp kernel-m68k-cf5208.config .config
 #   make ARCH=m68k CROSS_COMPILE=m68k-openadk-linux-uclibc- olddefconfig vmlinux
 #   cp vmlinux kernel-m68k-cf5208.img
