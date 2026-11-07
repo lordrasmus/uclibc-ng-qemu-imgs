@@ -81,3 +81,13 @@
 #   make
 #   strip qemu-system-avr32
 #   xz -9 qemu-system-avr32
+#
+# qemu-system-nds32.xz  71a04ccb7d (ae3xx as before; new ag101p board for
+#                      the Andes BSP Linux 3.4 of the gcc-4.9.3 target, TLB
+#                      entries above 4 KB), built on the runner container:
+#
+#   ../configure --target-list=nds32-softmmu --static --disable-gio \
+#     --python=/opt/python3.12/bin/python3.12
+#   make
+#   strip qemu-system-nds32
+#   xz -9 qemu-system-nds32
