@@ -1,0 +1,224 @@
+# m68k: 68000: install the CPU exception vectors
+# trap_init() set only the system call and the interrupt vectors; those of
+# bus and address errors, illegal instructions, division by zero, the
+# privilege violation, trace and trap #1-#15 were never set (since 2003,
+# c0af7cb7e9, and before that only for the DragonBall 2 board). An
+# exception in user space jumped to whatever the vector held and the
+# machine hung. One stub per vector passes its number, which the 68000
+# does not stack, to m68000_exception(), which sends what trap_c() sends
+# on the other m68k.
+diff --git a/arch/m68k/68000/entry.S b/arch/m68k/68000/entry.S
+--- a/arch/m68k/68000/entry.S
++++ b/arch/m68k/68000/entry.S
+@@ -215,6 +215,46 @@ inthandler:
+ 3:     	addql	#8,%sp			/*  pop parameters off stack*/
+ 	bra	ret_from_exception
+ 
++/*
++ * CPU exceptions.  The 68000 puts no vector number on the stack, so each
++ * vector has a stub that passes its number to m68000_exception().
++ */
++.macro EXCEPTION vec
++.globl exception\vec
++exception\vec:
++	SAVE_ALL_INT
++	movel	%sp,%sp@-
++	movel	#\vec,%sp@-
++	jbsr	m68000_exception
++	addql	#8,%sp
++	bra	ret_from_exception
++.endm
++
++/*
++ * Bus and address errors stack eight more bytes in front of SR and PC:
++ * the access type, the access address and the instruction register.
++ */
++.macro EXCEPTION_GROUP0 vec
++.globl exception\vec
++exception\vec:
++	addql	#8,%sp
++	SAVE_ALL_INT
++	movel	%sp,%sp@-
++	movel	#\vec,%sp@-
++	jbsr	m68000_exception
++	addql	#8,%sp
++	bra	ret_from_exception
++.endm
++
++	EXCEPTION_GROUP0 2
++	EXCEPTION_GROUP0 3
++	.irp vec,4,5,6,7,8,9,10,11,12,13,14,15
++	EXCEPTION \vec
++	.endr
++	.irp vec,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47
++	EXCEPTION \vec
++	.endr
++
+ /*
+  * Handler for uninitialized and spurious interrupts.
+  */
+diff --git a/arch/m68k/68000/ints.c b/arch/m68k/68000/ints.c
+--- a/arch/m68k/68000/ints.c
++++ b/arch/m68k/68000/ints.c
+@@ -15,6 +15,7 @@
+ #include <linux/interrupt.h>
+ #include <linux/irq.h>
+ #include <linux/cpu.h>
++#include <linux/sched/signal.h>
+ #include <asm/traps.h>
+ #include <asm/io.h>
+ #include <asm/machdep.h>
+@@ -31,36 +32,6 @@
+ 
+ /* assembler routines */
+ asmlinkage void system_call(void);
+-asmlinkage void buserr(void);
+-asmlinkage void trap(void);
+-asmlinkage void trap3(void);
+-asmlinkage void trap4(void);
+-asmlinkage void trap5(void);
+-asmlinkage void trap6(void);
+-asmlinkage void trap7(void);
+-asmlinkage void trap8(void);
+-asmlinkage void trap9(void);
+-asmlinkage void trap10(void);
+-asmlinkage void trap11(void);
+-asmlinkage void trap12(void);
+-asmlinkage void trap13(void);
+-asmlinkage void trap14(void);
+-asmlinkage void trap15(void);
+-asmlinkage void trap33(void);
+-asmlinkage void trap34(void);
+-asmlinkage void trap35(void);
+-asmlinkage void trap36(void);
+-asmlinkage void trap37(void);
+-asmlinkage void trap38(void);
+-asmlinkage void trap39(void);
+-asmlinkage void trap40(void);
+-asmlinkage void trap41(void);
+-asmlinkage void trap42(void);
+-asmlinkage void trap43(void);
+-asmlinkage void trap44(void);
+-asmlinkage void trap45(void);
+-asmlinkage void trap46(void);
+-asmlinkage void trap47(void);
+ asmlinkage irqreturn_t bad_interrupt(int, void *);
+ asmlinkage irqreturn_t inthandler(void);
+ asmlinkage irqreturn_t inthandler1(void);
+@@ -71,6 +42,71 @@ asmlinkage irqreturn_t inthandler5(void);
+ asmlinkage irqreturn_t inthandler6(void);
+ asmlinkage irqreturn_t inthandler7(void);
+ 
++/* the CPU exception stubs in entry.S, one per vector */
++#define EXCEPTION_STUB(vec) asmlinkage void exception##vec(void);
++EXCEPTION_STUB(2) EXCEPTION_STUB(3) EXCEPTION_STUB(4) EXCEPTION_STUB(5)
++EXCEPTION_STUB(6) EXCEPTION_STUB(7) EXCEPTION_STUB(8) EXCEPTION_STUB(9)
++EXCEPTION_STUB(10) EXCEPTION_STUB(11) EXCEPTION_STUB(12) EXCEPTION_STUB(13)
++EXCEPTION_STUB(14) EXCEPTION_STUB(15)
++EXCEPTION_STUB(33) EXCEPTION_STUB(34) EXCEPTION_STUB(35) EXCEPTION_STUB(36)
++EXCEPTION_STUB(37) EXCEPTION_STUB(38) EXCEPTION_STUB(39) EXCEPTION_STUB(40)
++EXCEPTION_STUB(41) EXCEPTION_STUB(42) EXCEPTION_STUB(43) EXCEPTION_STUB(44)
++EXCEPTION_STUB(45) EXCEPTION_STUB(46) EXCEPTION_STUB(47)
++
++void die_if_kernel(char *str, struct pt_regs *fp, int nr);
++
++/*
++ * A CPU exception: the signals trap_c() sends for the other m68k, with
++ * the PC of the exception frame as the fault address, since the 68000
++ * stacks no format word to say more.
++ */
++asmlinkage void m68000_exception(int vec, struct pt_regs *regs)
++{
++	int sig, code;
++
++	switch (vec) {
++	case VEC_BUSERR:
++		sig = SIGBUS;
++		code = BUS_ADRERR;
++		break;
++	case VEC_ADDRERR:
++		sig = SIGBUS;
++		code = BUS_ADRALN;
++		break;
++	case VEC_PRIV:
++		sig = SIGILL;
++		code = ILL_PRVOPC;
++		break;
++	case VEC_ZERODIV:
++		sig = SIGFPE;
++		code = FPE_INTDIV;
++		break;
++	case VEC_CHK:
++	case VEC_TRAP:
++		sig = SIGFPE;
++		code = FPE_INTOVF;
++		break;
++	case VEC_TRACE:
++		sig = SIGTRAP;
++		code = TRAP_TRACE;
++		break;
++	case VEC_TRAP15:
++		sig = SIGTRAP;
++		code = TRAP_BRKPT;
++		break;
++	case VEC_TRAP1 ... VEC_TRAP14:
++		sig = SIGILL;
++		code = ILL_ILLTRP;
++		break;
++	default:
++		sig = SIGILL;
++		code = ILL_ILLOPC;
++		break;
++	}
++	die_if_kernel("Kernel mode exception", regs, vec);
++	force_sig_fault(sig, code, (void __user *) regs->pc);
++}
++
+ /* The 68k family did not have a good way to determine the source
+  * of interrupts until later in the family.  The EC000 core does
+  * not provide the vector number on the stack, we vector everything
+@@ -161,8 +197,44 @@ void __init trap_init(void)
+ 	for (i = 72; i < 256; ++i)
+ 		_ramvec[i] = (e_vector) bad_interrupt;
+ 
++	/*
++	 * CPU exceptions and trap #1 to #15.  Left unset, an illegal
++	 * instruction or a division by zero in user space jumped to
++	 * whatever the vector held, and the machine hung.
++	 */
++	_ramvec[2] = exception2;
++	_ramvec[3] = exception3;
++	_ramvec[4] = exception4;
++	_ramvec[5] = exception5;
++	_ramvec[6] = exception6;
++	_ramvec[7] = exception7;
++	_ramvec[8] = exception8;
++	_ramvec[9] = exception9;
++	_ramvec[10] = exception10;
++	_ramvec[11] = exception11;
++	_ramvec[12] = exception12;
++	_ramvec[13] = exception13;
++	_ramvec[14] = exception14;
++	_ramvec[15] = exception15;
++
+ 	_ramvec[32] = system_call;
+ 
++	_ramvec[33] = exception33;
++	_ramvec[34] = exception34;
++	_ramvec[35] = exception35;
++	_ramvec[36] = exception36;
++	_ramvec[37] = exception37;
++	_ramvec[38] = exception38;
++	_ramvec[39] = exception39;
++	_ramvec[40] = exception40;
++	_ramvec[41] = exception41;
++	_ramvec[42] = exception42;
++	_ramvec[43] = exception43;
++	_ramvec[44] = exception44;
++	_ramvec[45] = exception45;
++	_ramvec[46] = exception46;
++	_ramvec[47] = exception47;
++
+ 	_ramvec[65] = (e_vector) inthandler1;
+ 	_ramvec[66] = (e_vector) inthandler2;
+ 	_ramvec[67] = (e_vector) inthandler3;

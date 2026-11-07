@@ -14,7 +14,7 @@
 # The rootfs goes in uncompressed: without an MMU the kernel cannot get a
 # large enough contiguous buffer for the xz dictionary.
 #
-# Build: two separate patches, then kernel-m68k-68000.config.
+# Build: three separate patches, then kernel-m68k-68000.config.
 #
 # - kernel-m68k-68000-qemu-board.patch: CONFIG_M68000_QEMU for the m68328
 #   machine (setup in arch/m68k/68000/qemu.c, UBOOT-style command line and
@@ -24,10 +24,18 @@
 #   to user space read the upper word of thread_info->flags, where no TIF bit
 #   lives, so signals were never delivered and preemption never happened on
 #   the way out -- a handler never ran, and console output stalled.
+# - kernel-m68k-68000-exceptions.patch: trap_init() never installed the CPU
+#   exception vectors (bus/address error, illegal instruction, division by
+#   zero, privilege, trace, trap #1-#15).  An exception in user space jumped
+#   to whatever the vector held and the machine hung; tst-ucontext-regs hung
+#   the CI run on gcc's trap #7.  One stub per vector passes the number the
+#   68000 does not stack to m68000_exception(), which sends the signals
+#   trap_c() sends on the other m68k.
 #
 #   cd linux-6.18.37
 #   for p in kernel-m68k-68000-qemu-board.patch \
-#            kernel-m68k-68000-tinfo-flags.patch; do patch -p1 < $p; done
+#            kernel-m68k-68000-tinfo-flags.patch \
+#            kernel-m68k-68000-exceptions.patch; do patch -p1 < $p; done
 #   cp kernel-m68k-68000.config .config
 #   make ARCH=m68k CROSS_COMPILE=m68k-openadk-uclinux-uclibc- \
 #        olddefconfig vmlinux
