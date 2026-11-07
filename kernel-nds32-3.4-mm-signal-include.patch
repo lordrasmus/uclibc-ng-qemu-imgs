@@ -1,0 +1,16 @@
+# nds32 (Andes BSP 3.4): mm/init.c includes ../../kernel/signal.h, which only
+# resolves in an in-tree build (via -Iarch/nds32/include/generated);
+# with make O= it does not.  The file is arch/nds32/kernel/signal.h.
+diff --git a/arch/nds32/mm/init.c b/arch/nds32/mm/init.c
+index 8a548aa9..b3ee1cfa 100644
+--- a/arch/nds32/mm/init.c
++++ b/arch/nds32/mm/init.c
+@@ -30,7 +30,7 @@
+ #include <asm/mach/map.h>
+ 
+ #include "mm.h"
+-#include "../../kernel/signal.h"
++#include "../kernel/signal.h"
+ 
+ #define TABLE_SIZE	(PTRS_PER_PTE * sizeof(pte_t))
+ 

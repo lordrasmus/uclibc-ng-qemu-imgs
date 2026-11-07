@@ -1,0 +1,43 @@
+# kernel-nds32-3.4.img -- Andes BSP Linux 3.4.112 for an AG101P (nds32le, N13)
+#
+# For the gcc-4.9.3 target nds32-le-npt-gcc-4.9.3-kernel-3.4.112-shared-elf.
+# Its toolchain carries the Andes BSP 3.4 headers with their own syscall ABI
+# (__NR_SYSCALL_BASE 0x5000, number in the "syscall" SWID immediate), which
+# the mainline image kernel-nds32.img (5.15, asm-generic) does not speak.
+#
+# Runs on qemu-system-nds32 -M ag101p from the qemu fork (lordrasmus/qemu,
+# branch uclibc-ng); upstream qemu never had nds32.  The image is the
+# stripped vmlinux (ELF), which carries physical load addresses.
+#
+#   qemu-system-nds32 -M ag101p -nographic -kernel kernel-nds32-3.4.img \
+#     -initrd rootfs.img.xz -append console=ttyS0
+#
+# The machine is what the kernel uses with PLAT_AG101P and IVIC (no
+# interrupt controller, platforms/nointc.c): 256 MiB from 0, 8250 UART
+# (reg-shift 2) at 0x99600000 on IVIC input 7, a second one at 0x98300000
+# (11), FTTMR010 at 0x98400000 (19/14/15).  qemu loads the initrd at 16 MiB
+# and passes memory, initrd and command line as ATAGs at 0x400.  The kernel
+# maps itself in head.S with 1 MB TLB entries; the fork's TLB handles page
+# sizes above 4 KB for that.
+#
+# The kernel starts /sbin/init, not /init (openadk's startup.patch is in the
+# BSP tarball); the uClibc-ng test rootfs links /sbin/init to the runner.
+#
+# Build: the BSP tree is git/toolchains/linux-nds32-3.4.112.tar.xz (the one
+# the CI installs headers from).  kernel-nds32-3.4.config is qemu_defconfig
+# switched to PLAT_AG101P + IVIC, without MODULES, DEBUG_INFO, the debug
+# options, FB, FTMAC100, FTSDC010, EXT3/EXT4 (ext4 does not build on nds32:
+# no atomic64) and HWZOL, with HOTPLUG + DEVTMPFS(_MOUNT), RD_XZ, SYS_CLK
+# 40 MHz (timer runs at SYS_CLK/2 = the board's 20 MHz) and 256 MiB SDRAM.
+#
+#   cd linux-nds32-3.4.112
+#   patch -p1 < kernel-nds32-3.4-mm-signal-include.patch   # only for make O=
+#   patch -p1 < kernel-nds32-3.4-unifdef-constexpr.patch   # host gcc >= 15
+#   cp kernel-nds32-3.4.config .config
+#   make ARCH=nds32 CROSS_COMPILE=nds32le-openadk-linux-uclibc- \
+#        oldconfig vmlinux
+#   nds32le-openadk-linux-uclibc-strip -o kernel-nds32-3.4.img vmlinux
+#
+# The toolchain is the CI's toolchain-nds32le-gcc-4.9.3-npt-shared.  Neither
+# patch changes the kernel binary; they only let it build with make O= and
+# with a C23 host compiler (headers_install builds scripts/unifdef).
