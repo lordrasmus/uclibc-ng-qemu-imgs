@@ -35,5 +35,6 @@ So:
   both builds have the same size, so the download log looked the same.  Check
   the `Linux version ... #N <date>` line in the next run's boot log against
   your build.
-- To reproduce a CI run locally, use the qemu the CI uses: a binary in
-  `qemu-bin/` replaces the one from `qemu-inst.tar.xz`.
+- To reproduce a CI run locally, use the qemu the CI uses: the binary from
+  `qemu-bin/`.  It is statically linked and carries its firmware, so it needs
+  nothing next to it.

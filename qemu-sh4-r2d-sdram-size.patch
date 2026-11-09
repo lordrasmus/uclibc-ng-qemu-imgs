@@ -14,8 +14,8 @@
 # kernel-sh4.config needs a matching CONFIG_MEMORY_SIZE -- sh4 has no memory
 # detection, the size is compiled in.  Apply this to qemu first, or the kernel
 # claims memory the machine does not have.
-# Only qemu-system-sh4 in qemu-inst.tar.xz is rebuilt from this (8.1.2); the
-# other binaries in the bundle are untouched.
+# This is the 8.1.2 version; the qemu fork carries the change as "hw/sh4/r2d:
+# give the guest 112 MiB of SDRAM", and so qemu-bin/qemu-system-sh4.xz.
 --- qemu-8.1.2/hw/sh4/r2d.c
 +++ qemu-8.1.2/hw/sh4/r2d.c
 @@ -48,7 +48,13 @@

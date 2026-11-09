@@ -3,9 +3,8 @@
 # Boots from an ext2 disk on a virtio-mmio device.  The real board has no disk
 # and qemu's mcf5208evb has no -initrd, so the device was added to the qemu
 # fork (lordrasmus/qemu, branch uclibc-ng, b3c06ca3a4): legacy virtio-mmio at
-# 0xfc0f0000 on interrupt controller source 30 (vector 94).  Upstream qemu and
-# the qemu in qemu-inst.tar.xz before that commit cannot run this image; take
-# qemu-bin/qemu-system-m68k.xz.
+# 0xfc0f0000 on interrupt controller source 30 (vector 94).  Upstream qemu
+# cannot run this image; take qemu-bin/qemu-system-m68k.xz.
 #
 #   qemu-system-m68k -nographic -M mcf5208evb -cpu m5208 -m 512 \
 #     -kernel kernel-m68k-cf5208.img \
