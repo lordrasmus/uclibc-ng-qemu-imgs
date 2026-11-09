@@ -1,94 +1,36 @@
-# qemu-bin/ -- single qemu binaries, ahead of qemu-inst.tar.xz
+# qemu-bin/ -- the qemu binaries of the CI
 #
-# The qemu job of the CI (z_qemu_test_run.yml) takes qemu-bin/<binary>.xz, if
-# there is one for the first word of the target's qemu command, over the
-# binary from qemu-inst.tar.xz.  That lets one machine change without
-# rebuilding and re-uploading every qemu.
+# The qemu job of the CI (z_qemu_test_run.yml) and uc_devel take
+# qemu-bin/<binary>.xz for the first word of the target's qemu command.
 #
 # The binaries are statically linked, so they run on any x86_64 Linux host,
-# and are built from the qemu fork (lordrasmus/qemu, branch uclibc-ng).
+# and carry the firmware they load (bios-256k.bin, OpenBIOS, OpenSBI,
+# SeaBIOS-hppa, palcode-clipper, the efi NIC ROMs, the s3adsp1800 device
+# tree): qemu_find_file() falls back to the built-in copy when a file is in
+# none of the data directories, so no pc-bios or share/qemu directory is
+# needed.  A directory given with -L still wins.
 #
-# qemu-system-m68k.xz  b3c06ca3a4 (virtio-mmio disk on mcf5208evb), built on
-#                      the runner container:
+# All 38 come from the qemu fork lordrasmus/qemu, branch uclibc-ng, at
+# 4e86befe6b (upstream qemu 71f25c7541, v11.1.0-3704, plus the fork), built
+# together on the runner container:
 #
-#   ../configure --target-list=m68k-softmmu --static --disable-gio \
+#   ../configure --target-list=aarch64-softmmu,alpha-softmmu,arc-softmmu,\
+#   arm-softmmu,avr32-softmmu,bfin-softmmu,c6x-softmmu,cris-softmmu,\
+#   cskyv2-softmmu,frv-softmmu,h8300-softmmu,hppa-softmmu,i386-softmmu,\
+#   ia64-softmmu,kvx-softmmu,lm32-softmmu,loongarch64-softmmu,m68k-softmmu,\
+#   meta-softmmu,microblaze-softmmu,mips-softmmu,mips64-softmmu,\
+#   mips64el-softmmu,mipsel-softmmu,nds32-softmmu,nios2-softmmu,or1k-softmmu,\
+#   ppc-softmmu,riscv32-softmmu,riscv64-softmmu,sh4-softmmu,sh4eb-softmmu,\
+#   sparc-softmmu,sparc64-softmmu,tilegx-softmmu,v850-softmmu,x86_64-softmmu,\
+#   xtensa-softmmu --static --disable-gio \
 #     --python=/opt/python3.12/bin/python3.12
 #   make
-#   strip qemu-system-m68k
-#   xz -9 qemu-system-m68k
+#   strip qemu-system-*; xz -9 qemu-system-*
 #
-# qemu-system-frv.xz   f137a3955b on branch frv, cherry-picked to uclibc-ng as
-#                      b111fe1771 (virtio-mmio disk on mb93091), built on the
-#                      runner container:
+# The firmware is built in by default in the fork (--disable-embed-firmware
+# leaves it out).  qemu-system-microblazeel is gone upstream (46a25ae3f0);
+# the little-endian targets use qemu-system-microblaze
+# -M petalogix-s3adsp1800,endianness=little.
 #
-#   ../configure --target-list=frv-softmmu --static --disable-gio \
-#     --python=/opt/python3.12/bin/python3.12
-#   make
-#   strip qemu-system-frv
-#   xz -9 qemu-system-frv
-#
-# qemu-system-cris.xz  15b367affc (axis-dev88 back for CRISv32, with -initrd
-#                      and a virtio-mmio disk; a virtio-mmio disk on
-#                      etrax100lx too; bwf on CRISv10 fixed; a CRISv10 delay
-#                      slot whose fetch faults, or which faults on a data
-#                      access, restarts at its branch), built on the runner
-#                      container:
-#
-#   ../configure --target-list=cris-softmmu --static --disable-gio \
-#     --python=/opt/python3.12/bin/python3.12
-#   make
-#   strip qemu-system-cris
-#   xz -9 qemu-system-cris
-#
-# qemu-system-bfin.xz  72f4f2468f (RAISE sets ILAT under the BQL; the core
-#                      timer interrupt could be lost against it and the
-#                      guest idled for good), built here with the options
-#                      of the qemu-inst.tar.xz binary:
-#
-#   ../configure --target-list=bfin-softmmu --static \
-#     --without-default-features --disable-pixman --disable-docs \
-#     --disable-werror
-#   make
-#   strip qemu-system-bfin
-#   xz -9 qemu-system-bfin
-#
-# qemu-system-ia64.xz  385552f795 (Itanium 2 virt machine; NaT collection,
-#                      rfi frame registers and misaligned accesses fixed
-#                      since the qemu-inst.tar.xz binary db34467775),
-#                      built here:
-#
-#   ../configure --target-list=ia64-softmmu --static \
-#     --without-default-features --enable-tcg --disable-pixman --disable-docs
-#   make
-#   strip qemu-system-ia64
-#   xz -9 qemu-system-ia64
-#
-# qemu-system-cskyv2.xz  3089edc2ef (bkpt raises the breakpoint exception
-#                      for the guest instead of ending the emulator with
-#                      exit(0): __builtin_trap took the whole test run down),
-#                      built here:
-#
-#   ../configure --target-list=cskyv2-softmmu --static \
-#     --without-default-features --enable-tcg --disable-pixman --disable-docs
-#   make
-#   strip qemu-system-cskyv2
-#   xz -9 qemu-system-cskyv2
-#
-# qemu-system-avr32.xz  1773f4fd63 (atngw100 with a virtio-mmio slot for a
-#                      root disk; COMPARE lowered under the BQL), built here:
-#
-#   ../configure --target-list=avr32-softmmu --static \
-#     --without-default-features --enable-tcg --disable-pixman --disable-docs
-#   make
-#   strip qemu-system-avr32
-#   xz -9 qemu-system-avr32
-#
-# qemu-system-nds32.xz  71a04ccb7d (ae3xx as before; new ag101p board for
-#                      the Andes BSP Linux 3.4 of the gcc-4.9.3 target, TLB
-#                      entries above 4 KB), built on the runner container:
-#
-#   ../configure --target-list=nds32-softmmu --static --disable-gio \
-#     --python=/opt/python3.12/bin/python3.12
-#   make
-#   strip qemu-system-nds32
-#   xz -9 qemu-system-nds32
+# A single binary can still be replaced on its own when one machine changes;
+# say here which fork commit it comes from.
