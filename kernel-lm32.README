@@ -41,6 +41,8 @@
 #                                      stack
 #   kernel-lm32-nommu-dup-mm.patch     a clone() child without CLONE_VM freed
 #                                      its parent's VMAs (BUG in add_vma_to_mm)
+#   kernel-lm32-irq-frame-argc.patch   an interrupt at a new program's _start
+#                                      overwrote argc on its stack with 0
 #
 # Build:
 #

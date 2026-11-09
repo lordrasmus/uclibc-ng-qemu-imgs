@@ -1,0 +1,64 @@
+# lm32: an interrupt at a new program's _start zeroed its argc.
+# _long_interrupt_handler put its 132-byte frame on the interrupted stack
+# up to and including the word at sp, and stored the saved kernel_mode
+# there.  lm32 code keeps nothing at (sp+0), but at _start the kernel left
+# argc there, and crt1 reads it with its fourth instruction: an interrupt
+# before that started main with argc 0 and no arguments (tst-fexecve's
+# children, about one in four full suite runs under load).  Allocate 136
+# bytes so the frame stays below sp; the same for the scratch words of
+# _irq_signal_entry.  On top of kernel-lm32-irq-signals.patch.
+--- a/arch/lm32/kernel/entry.S
++++ b/arch/lm32/kernel/entry.S
+@@ -172,7 +172,12 @@
+ /* we therefore only save and restore the caller saved registers */
+ /* (r1-r10, ra, ea because an interrupt could interrupt another one) */
+ _long_interrupt_handler:
+-	addi    sp, sp, -132
++	/*
++	 * 136, not 132: the frame must not reach the word at the interrupted
++	 * sp.  lm32 code keeps nothing there, but at a new program's _start
++	 * it holds argc, and an interrupt before crt1 read it made it 0.
++	 */
++	addi    sp, sp, -136
+ 	sw      (sp+120), ra
+ 	calli   _save_irq_frame
+ 
+@@ -254,12 +259,13 @@
+  * and r1 handed through unchanged.
+  */
+ _irq_signal_entry:
+-	sw (sp+0), r9
++	/* below the interrupted sp, see _long_interrupt_handler */
++	sw (sp+-4), r9
+ 	/* interrupts off as for scall (they already are), on again at eret */
+ 	mvi r9, 2
+ 	wcsr IE, r9
+-	sw (sp+-4), r10
+-	sw (sp+-8), r11
++	sw (sp+-8), r10
++	sw (sp+-12), r11
+ 
+ 	mvhi r9, hi(lm32_current_thread)
+ 	ori r9, r9, lo(lm32_current_thread)
+@@ -279,9 +285,9 @@
+ 	addi sp, sp, -132
+ 	sw (sp+116), r11
+ 
+-	lw r9, (r11+0)
+-	lw r10, (r11+-4)
+-	lw r11, (r11+-8)
++	lw r9, (r11+-4)
++	lw r10, (r11+-8)
++	lw r11, (r11+-12)
+ 
+ 	sw    (sp + 120), ra
+ 	calli _save_syscall_frame
+@@ -344,7 +350,7 @@
+ 	lw      r10, (sp+44);
+ 	lw      ra,  (sp+120)
+ 	lw      ea,  (sp+124)
+-	addi    sp, sp, 132
++	addi    sp, sp, 136
+ 	eret
+ 
+ _save_syscall_frame:
