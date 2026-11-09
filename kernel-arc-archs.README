@@ -1,0 +1,22 @@
+# kernel-arc-archs.img -- Linux 6.12.91 for ARC HS (ARCv2) on qemu's virt machine
+#
+# Used by the arcv2-archs targets (with and without fpud).  The rootfs is an
+# ext2 disk on virtio-mmio, not an initramfs placeholder in the image any
+# more: the virt machine of the qemu fork has five virtio-mmio slots at
+# 0xf0100000 (IRQ 31 up), and the built-in haps_hs device tree describes
+# exactly those.  The config adds CONFIG_VIRTIO_BLK and CONFIG_EXT2_FS and
+# drops CONFIG_INITRAMFS_SOURCE.
+#
+#   qemu-system-arc -M virt -cpu archs -m 1G -nographic -kernel kernel-arc-archs.img \
+#     -drive if=none,id=hd,format=raw,file=rootfs.ext2 \
+#     -device virtio-blk-device,drive=hd -append "root=/dev/vda rootfstype=ext2 rw"
+#
+# -append is added to the device tree's bootargs (console, print-fatal-signals),
+# it does not replace them.  -m 1G is needed: haps_hs.dts declares 1 GB.
+#
+# Built with the toolchain of the arcv2 dev pack
+# (toolchain-arc-archs-gcc-15.3.0-npt-shared, gcc 15.3.0, binutils 2.47):
+#
+#   make O=<obj> ARCH=arc CROSS_COMPILE=arc-openadk-linux-uclibc- olddefconfig
+#   make O=<obj> ARCH=arc CROSS_COMPILE=arc-openadk-linux-uclibc- vmlinux
+#   cp <obj>/vmlinux kernel-arc-archs.img
