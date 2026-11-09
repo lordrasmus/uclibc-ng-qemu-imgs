@@ -34,3 +34,7 @@
 #
 # A single binary can still be replaced on its own when one machine changes;
 # say here which fork commit it comes from.
+#
+# Replaced on their own since:
+#   qemu-system-h8300  a77ea06d01 (on 4e86befe6b): LDC/STC Rn with register
+#                      field 2 or 3 aborted qemu (helper_get_ccr assert)

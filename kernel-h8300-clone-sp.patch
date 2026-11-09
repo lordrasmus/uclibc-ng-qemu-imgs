@@ -1,0 +1,37 @@
+# h8300: clone() with a new stack ran the child on the parent's stack.
+# copy_thread() put the new stack only into thread.usp, but RESTORE_ALL takes
+# the user stack pointer from pt_regs (LSP), a copy of the parent's.  It also
+# builds er0, the vector, (exr) and the exception frame below that pointer,
+# which rte pops, so the child's regs->sp has to sit that far below newsp.
+# Same frame struct rt_sigframe reserves with its dummy_* fields.  Upstream
+# never had it right (5.15 copy_thread is identical).
+--- a/arch/h8300/kernel/process.c
++++ b/arch/h8300/kernel/process.c
+@@ -102,6 +102,13 @@
+ {
+ }
+ 
++/* er0, vector, (exr,) ccr/pc: what RESTORE_ALL leaves below the user sp */
++#if defined(CONFIG_CPU_H8S)
++#define USER_RET_FRAME	(4 + 4 + 2 + 4)
++#else
++#define USER_RET_FRAME	(4 + 4 + 4)
++#endif
++
+ int copy_thread(unsigned long clone_flags,
+ 		unsigned long usp, unsigned long topstk,
+ 		struct task_struct *p)
+@@ -119,6 +126,13 @@
+ 		*childregs = *current_pt_regs();
+ 		childregs->er0 = 0;
+ 		childregs->retpc = (unsigned long) ret_from_fork;
++		/*
++		 * RESTORE_ALL takes the user stack from regs->sp and builds
++		 * er0, the vector and the exception frame there, which rte
++		 * pops: leave room for them below the new stack.
++		 */
++		if (usp)
++			childregs->sp = usp - USER_RET_FRAME;
+ 		p->thread.usp = usp ?: rdusp();
+ 	}
+ 	p->thread.ksp = (unsigned long)childregs;

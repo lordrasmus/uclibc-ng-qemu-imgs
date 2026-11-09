@@ -23,6 +23,7 @@
 #   kernel-h8300-rambase.patch         CONFIG_RAMBASE instead of a fixed 0x400000
 #   kernel-h8300-syscall-irq.patch     system calls ran with interrupts masked
 #   kernel-h8300-signal-sp.patch       signal frames went to the wrong stack
+#   kernel-h8300-clone-sp.patch        clone() children ran on the parent's stack
 #   kernel-h8300-memset-return.patch   memset returned the end of the buffer
 #   kernel-h8300-fallocate-args.patch  fallocate read its offsets scrambled
 #   kernel-h8300-cc-clobber.patch      asm without "cc" breaks with gcc >= 12
@@ -33,7 +34,7 @@
 # Build:
 #
 #   cd linux-4.4.302
-#   for p in virtio-dts rambase syscall-irq signal-sp memset-return \
+#   for p in virtio-dts rambase syscall-irq signal-sp clone-sp memset-return \
 #            fallocate-args cc-clobber tpu smc91x sh-sci-overrun ; do
 #     patch -p1 < kernel-h8300-$p.patch
 #   done
@@ -47,4 +48,4 @@
 # 5.18, the last kernel with arch/h8300, does not boot with this gcc (page
 # allocator and slab corruption from the first allocations on); 4.4 does.
 #
-# Result with the CI's FLAT rootfs: 333 passed, 0 failed, 13 skipped.
+# Result with the CI's FLAT rootfs: 343 passed, 0 failed, 13 skipped.
