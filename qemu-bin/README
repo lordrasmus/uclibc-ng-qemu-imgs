@@ -38,3 +38,6 @@
 # Replaced on their own since:
 #   qemu-system-h8300  a77ea06d01 (on 4e86befe6b): LDC/STC Rn with register
 #                      field 2 or 3 aborted qemu (helper_get_ccr assert)
+#   qemu-system-meta   e70161431a (on a77ea06d01): a GET/SET without a valid
+#                      base register crashed qemu in tcg_optimize instead of
+#                      giving the guest SIGILL
