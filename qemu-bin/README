@@ -40,6 +40,9 @@
 #                      field 2 or 3 aborted qemu (helper_get_ccr assert)
 #   qemu-system-kvx    103f121e04 (on e70161431a): cluster frequency back to
 #                      1MHz; at 1GHz guest time ran 1000 times too slow
+#   qemu-system-sh4,   854424c589 (on 103f121e04): an interrupt rte unmasked was
+#   qemu-system-sh4eb  not taken after rte's delay slot; a user loop without
+#                      system calls then never saw a timer interrupt again
 #   qemu-system-meta   e70161431a (on a77ea06d01): a GET/SET without a valid
 #                      base register crashed qemu in tcg_optimize instead of
 #                      giving the guest SIGILL
