@@ -1,0 +1,35 @@
+# lm32: an interrupted system call returned its first argument.
+# With a handler for the signal, do_signal() left -ERESTARTNOHAND,
+# -ERESTARTSYS and the others alone, so the frame kept r1 = first argument
+# and the call "returned" it: pselect() gave nfds (0) instead of -1/EINTR,
+# waitpid() a pid without status.  Turn them into EINTR, or with SA_RESTART
+# (-ERESTARTSYS) and for -ERESTARTNOINTR run the scall again, as the other
+# architectures do.  On top of kernel-lm32-openadk-lm32-signal-save-
+# syscall-result-in-sigframe.patch.
+--- a/arch/lm32/kernel/signal.c
++++ b/arch/lm32/kernel/signal.c
+@@ -254,10 +254,20 @@
+ 		/* LM32FIX: the syscall result is passed in "retval" and entry.S stores it into
+ 		 * the pt_regs r1 slot only after manage_signals() has returned.  Store it now,
+ 		 * otherwise the signal frame saves the stale first syscall argument in r1 and
+-		 * rt_sigreturn makes the interrupted syscall return that value.  Restart
+-		 * codes keep the original argument. */
+-		if (retval != -ERESTARTNOHAND && retval != -ERESTARTSYS &&
+-		    retval != -ERESTARTNOINTR && retval != -ERESTART_RESTARTBLOCK)
++		 * rt_sigreturn makes the interrupted syscall return that value.  A
++		 * restart code turns into EINTR, or into running the scall again. */
++		if (regs->r8 && (retval == -ERESTARTNOHAND ||
++				 retval == -ERESTART_RESTARTBLOCK ||
++				 (retval == -ERESTARTSYS &&
++				  !(ka.sa.sa_flags & SA_RESTART)))) {
++			/* interrupted by a handler: the call fails with EINTR */
++			regs->r1 = -EINTR;
++		} else if (regs->r8 && (retval == -ERESTARTSYS ||
++					retval == -ERESTARTNOINTR)) {
++			/* restart after the handler: r1 still holds the first
++			 * argument, run the scall again */
++			regs->ea -= 4;
++		} else
+ 			regs->r1 = retval;
+ 		handle_signal(signr, &info, &ka, oldset, regs);
+ 		if (test_thread_flag(TIF_RESTORE_SIGMASK))

@@ -30,6 +30,17 @@
 #                                      decoder's 8 MiB dictionary needs one
 #                                      contiguous block, the default 11 stops
 #                                      at 4 MiB and the initramfs never unpacks
+#   kernel-lm32-irq-signals.patch      signals were delivered only at system
+#                                      calls, never on the return from an
+#                                      interrupt: a computing process never
+#                                      got its SIGALRM
+#   kernel-lm32-signal-restart.patch   a system call interrupted by a handler
+#                                      returned its first argument instead of
+#                                      EINTR or being restarted
+#   kernel-lm32-clone-sp.patch         clone() children ran on the parent's
+#                                      stack
+#   kernel-lm32-nommu-dup-mm.patch     a clone() child without CLONE_VM freed
+#                                      its parent's VMAs (BUG in add_vma_to_mm)
 #
 # Build:
 #

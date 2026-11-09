@@ -1,0 +1,15 @@
+# lm32: clone() with a new stack ran the child on the parent's stack.
+# copy_thread() put the new stack only into thread.usp, but the return to
+# user mode loads sp from the copied syscall frame.  Set it there.
+--- a/arch/lm32/kernel/process.c
++++ b/arch/lm32/kernel/process.c
+@@ -213,6 +213,9 @@
+ 
+ 		/* user stack pointer is shared with the parent per definition of vfork */
+ 		p->thread.usp = usp;
++		/* the return to user mode loads sp from the frame, not from
++		 * thread.usp: clone() with a new stack must go there */
++		childsyscallregs->sp = usp;
+ 
+ 		/* kernel stack pointer is not shared with parent, it is the beginning of
+ 		 * the just created new task switch segment on the kernel stack */

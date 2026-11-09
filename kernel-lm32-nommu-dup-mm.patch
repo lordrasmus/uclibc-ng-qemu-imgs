@@ -1,0 +1,26 @@
+# nommu: a clone() child without CLONE_VM freed its parent's VMAs.
+# dup_mmap() is a no-op without an MMU, so dup_mm()'s memcpy left the
+# parent's VMA list and tree in the child's mm, and exit_mmap() of the
+# child freed them; the parent's next mmap hit BUG() in add_vma_to_mm().
+# Clear them for the child, as later kernels do in mm_init().
+--- a/kernel/fork.c
++++ b/kernel/fork.c
+@@ -839,6 +839,18 @@
+ 
+ 	memcpy(mm, oldmm, sizeof(*mm));
+ 	mm_init_cpumask(mm);
++#ifndef CONFIG_MMU
++	/*
++	 * dup_mmap() is a no-op without an MMU, so the copy kept the parent's
++	 * VMA list and tree, and a child of clone() without CLONE_VM freed
++	 * the parent's VMAs when it exited.  The child shares the memory and
++	 * owns no mapping; later kernels clear these in mm_init().
++	 */
++	mm->mmap = NULL;
++	mm->mm_rb = RB_ROOT;
++	mm->mmap_cache = NULL;
++	mm->map_count = 0;
++#endif
+ 
+ #ifdef CONFIG_TRANSPARENT_HUGEPAGE
+ 	mm->pmd_huge_pte = NULL;

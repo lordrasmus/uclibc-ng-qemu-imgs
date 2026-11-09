@@ -1,0 +1,139 @@
+# lm32: deliver signals on the way back from an interrupt to user mode.
+# manage_signals_irq() only rescheduled, so a signal reached a process only
+# at its next system call or exception: a program that computed without
+# system calls never got its SIGALRM (clocktest hung the test suite).  The
+# interrupt frame holds only the caller saved registers and may lie on the
+# user stack, so the delivery cannot happen there.  When a signal is
+# pending, the interrupt returns to _irq_signal_entry instead of to the
+# interrupted pc; that enters the kernel the way system_call does (kernel
+# stack, full frame), puts the interrupted pc into ea and calls
+# manage_signals() with nothing to restart.
+--- a/arch/lm32/kernel/entry.S
++++ b/arch/lm32/kernel/entry.S
+@@ -217,9 +217,89 @@
+ 	calli   asm_do_IRQ
+ 	addi    r1, sp, 4
+ 	calli   manage_signals_irq
++	be      r1, r0, 6f
++
++	/*
++	 * A signal is pending and we go back to user mode.  This frame has
++	 * only the caller saved registers and may lie on the user stack, so
++	 * deliver it from _irq_signal_entry, which enters the kernel like a
++	 * system call: return there instead of to the interrupted pc.  An
++	 * interrupt in _irq_signal_entry itself leaves it alone.
++	 */
++	lw      r2, (sp+124)
++	mvhi    r3, hi(_irq_signal_entry)
++	ori     r3, r3, lo(_irq_signal_entry)
++	mvhi    r4, hi(_irq_signal_entry_end)
++	ori     r4, r4, lo(_irq_signal_entry_end)
++	bgu     r3, r2, 7f
++	bgu     r4, r2, 6f
++7:
++	mvhi    r4, hi(lm32_irq_signal_ea)
++	ori     r4, r4, lo(lm32_irq_signal_ea)
++	sw      (r4+0), r2
++	sw      (sp+124), r3
++	/* clear EIE: eret enters _irq_signal_entry with interrupts off, so
++	 * that no other task's interrupt overwrites lm32_irq_signal_ea first */
++	rcsr    r5, IE
++	andi    r5, r5, 0xfffd
++	wcsr    IE, r5
+ 6:
+ 	bi      _restore_irq_frame_and_return
+ 
++/*
++ * Entered from _long_interrupt_handler with the user's registers in place,
++ * as if the interrupted code had run a scall: system_call's switch to the
++ * kernel stack and full frame, then ea at the interrupted pc (minus the 4
++ * the return path adds for scall), r8 = 0 so that nothing is restarted,
++ * and r1 handed through unchanged.
++ */
++_irq_signal_entry:
++	sw (sp+0), r9
++	/* interrupts off as for scall (they already are), on again at eret */
++	mvi r9, 2
++	wcsr IE, r9
++	sw (sp+-4), r10
++	sw (sp+-8), r11
++
++	mvhi r9, hi(lm32_current_thread)
++	ori r9, r9, lo(lm32_current_thread)
++	lw r9, (r9+0)
++	lw r10, (r9+TI_TASK)
++	lw r9, (r10+TASK_WHICH_STACK)
++
++	mv r11, sp
++
++	be r9, r0, 1f
++
++	sw (r10+TASK_USP), sp
++	lw sp, (r10+TASK_KSP)
++	sw (r10+TASK_WHICH_STACK), r0
++
++1:
++	addi sp, sp, -132
++	sw (sp+116), r11
++
++	lw r9, (r11+0)
++	lw r10, (r11+-4)
++	lw r11, (r11+-8)
++
++	sw    (sp + 120), ra
++	calli _save_syscall_frame
++
++	mvhi r9, hi(lm32_irq_signal_ea)
++	ori r9, r9, lo(lm32_irq_signal_ea)
++	lw r9, (r9+0)
++	addi r9, r9, -4
++	sw (sp+124), r9
++	sw (sp+36), r0
++
++	addi r2, sp, 4
++	lw r1, (sp+8)
++	calli manage_signals
++	sw (sp+8), r1
++	bi _restore_and_return_exception
++_irq_signal_entry_end:
++
+ _save_irq_frame:
+ 	sw      (sp+8),   r1
+ 	sw      (sp+12),  r2
+--- a/arch/lm32/kernel/signal.c
++++ b/arch/lm32/kernel/signal.c
+@@ -343,12 +343,22 @@
+ 	return retval;
+ }
+ 
+-asmlinkage void manage_signals_irq(struct pt_regs *regs)
++/* the interrupted pc, for _irq_signal_entry */
++unsigned long lm32_irq_signal_ea;
++
++/*
++ * Returns nonzero when a signal is pending on the way back to user mode;
++ * entry.S then delivers it through _irq_signal_entry, because the
++ * interrupt frame is not a full struct pt_regs.  Without that a program
++ * that computes without system calls never got its SIGALRM.
++ */
++asmlinkage int manage_signals_irq(struct pt_regs *regs)
+ {
+ 	unsigned long flags;
++	int pending;
+ 
+ 	if (!user_mode(regs))
+-		return;
++		return 0;
+ 
+ 	/* disable interrupts for sampling current_thread_info()->flags */
+ 	local_irq_save(flags);
+@@ -358,5 +368,9 @@
+ 		schedule();
+ 	}
+ 
++	pending = !!(current_thread_info()->flags & _TIF_SIGPENDING);
++
+ 	local_irq_restore(flags);
++
++	return pending;
+ }
